@@ -116,6 +116,36 @@ def _parse_table_tokens(tokens: list, start_idx: int) -> tuple[list[dict[str, st
     return rows, i
 
 
+def _parse_pipe_table_text(text: str) -> list[dict[str, str]]:
+    """Parse pipe-delimited table text when markdown-it parses it as a paragraph."""
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    if len(lines) < 2:
+        return []
+    if not all(line.startswith("|") and line.endswith("|") for line in lines):
+        return []
+
+    raw_rows = []
+    for line in lines:
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        # Skip separator rows like | --- | --- |
+        if all(re.match(r"^:?-+:?$", c) for c in cells if c):
+            continue
+        raw_rows.append(cells)
+
+    if len(raw_rows) < 2:
+        return []
+
+    headers = raw_rows[0]
+    result_rows = []
+    for row in raw_rows[1:]:
+        row_dict = {
+            h: (row[col_idx] if col_idx < len(row) else "")
+            for col_idx, h in enumerate(headers)
+        }
+        result_rows.append(row_dict)
+    return result_rows
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -162,49 +192,53 @@ def parse_markdown(
     while i < len(tokens):
         tok = tokens[i]
 
-        # ── Heading ──────────────────────────────────────────────────────
+        # ── Headings ─────────────────────────────────────────────────────
         if tok.type == "heading_open":
-            level = tok.tag  # "h1", "h2", "h3", ...
-            # The next token should be the inline content
+            level = int(tok.tag[1:]) if len(tok.tag) > 1 and tok.tag[1:].isdigit() else 1
             i += 1
+            heading_raw = ""
             if i < len(tokens) and tokens[i].type == "inline":
-                heading_text = _inline_text(tokens[i])
+                heading_raw = _inline_text(tokens[i])
+
+            if level == 1:
+                # Suite heading
+                name, tags = _extract_tags(heading_raw)
+                suite.name = name
+                suite.tags = tags
+                suite_desc_parts = []
+            elif level == 2:
+                # Scenario heading
+                in_suite_preamble = False
+                case_name, case_tags = _extract_tags(heading_raw)
                 line = _token_line(tok)
+                current_case = TestCase(
+                    name=case_name,
+                    line_number=line,
+                    tags=case_tags,
+                )
+                suite.test_cases.append(current_case)
+                case_desc_parts = []
+                case_has_steps = False
 
-                if level == "h1":
-                    name, tags = _extract_tags(heading_text)
-                    suite.name = name
-                    suite.tags = tags
-                elif level == "h2":
-                    # Finalise previous case description
-                    if current_case is not None and case_desc_parts:
-                        current_case.description = "\n\n".join(case_desc_parts)
-
-                    in_suite_preamble = False
-                    # Finalise suite description from preamble
-                    if suite_desc_parts and suite.description is None:
-                        suite.description = "\n\n".join(suite_desc_parts)
-
-                    name, tags = _extract_tags(heading_text)
-                    current_case = TestCase(name=name, line_number=line, tags=tags)
-                    suite.test_cases.append(current_case)
-                    case_desc_parts = []
-                    case_has_steps = False
             # Skip heading_close
             i += 1
             if i < len(tokens) and tokens[i].type == "heading_close":
                 i += 1
             continue
 
-        # ── Paragraph (description capture) ──────────────────────────────
+        # ── Paragraph (description capture & fallback table parsing) ────
         if tok.type == "paragraph_open":
             i += 1
             if i < len(tokens) and tokens[i].type == "inline":
                 para_text = _inline_text(tokens[i])
-                if in_suite_preamble:
-                    suite_desc_parts.append(para_text)
-                elif current_case is not None and not case_has_steps:
-                    case_desc_parts.append(para_text)
+                pipe_table_rows = _parse_pipe_table_text(para_text)
+                if current_case is not None and pipe_table_rows and not current_case.parameters:
+                    current_case.parameters = pipe_table_rows
+                else:
+                    if in_suite_preamble:
+                        suite_desc_parts.append(para_text)
+                    elif current_case is not None and not case_has_steps:
+                        case_desc_parts.append(para_text)
             # Skip paragraph_close
             i += 1
             if i < len(tokens) and tokens[i].type == "paragraph_close":
