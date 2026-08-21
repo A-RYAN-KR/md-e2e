@@ -97,10 +97,14 @@ def resolve_locator(
             ).first
 
         case TargetType.LINK:
-            return page.get_by_role("link", name=pattern)
+            return page.get_by_role("link", name=pattern).or_(
+                page.get_by_role("link", name=re.compile(re.escape(identifier), re.IGNORECASE))
+            ).first
 
         case TargetType.HEADING:
-            return page.get_by_role("heading", name=pattern)
+            return page.get_by_role("heading", name=pattern).or_(
+                page.get_by_role("heading", name=re.compile(re.escape(identifier), re.IGNORECASE))
+            ).first
 
         case TargetType.CHECKBOX:
             return page.get_by_role("checkbox", name=pattern).or_(
@@ -128,7 +132,7 @@ def resolve_locator(
             ).first
 
         case TargetType.TEXT:
-            return page.get_by_text(pattern)
+            return page.get_by_text(re.compile(re.escape(identifier), re.IGNORECASE)).first
 
         case TargetType.GENERIC | _:
             # Comprehensive semantic fallback
@@ -137,5 +141,5 @@ def resolve_locator(
                 .or_(page.get_by_placeholder(pattern))
                 .or_(page.get_by_role("button", name=pattern))
                 .or_(page.get_by_role("link", name=pattern))
-                .or_(page.get_by_text(pattern))
+                .or_(page.get_by_text(re.compile(re.escape(identifier), re.IGNORECASE)))
             ).first
