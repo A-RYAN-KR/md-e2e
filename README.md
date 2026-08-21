@@ -19,15 +19,13 @@
 
 <p align="center">
   <a href="#-why-md-e2e">Why md-e2e?</a> •
-  <a href="#-system-architecture">Architecture</a> •
   <a href="#-beginner-tutorial-step-by-step">Beginner Tutorial</a> •
   <a href="#-markdown-dsl-reference">DSL Reference</a> •
   <a href="#-variable-store--dynamic-state">Variables</a> •
   <a href="#-self-healing--ai-fallback">Self-Healing</a> •
   <a href="#-step-debugger--action-recorder">Debugger & Recorder</a> •
   <a href="#-living-documentation--reports">Reporting</a> •
-  <a href="#-pytest-integration">Pytest</a> •
-  <a href="#-benchmarks">Benchmarks</a>
+  <a href="#-pytest-integration">Pytest</a>
 </p>
 
 </div>
@@ -49,75 +47,6 @@ Traditional End-to-End (E2E) testing frameworks suffer from a massive **Glue-Cod
 2. **Zero Step Definitions**: If you write `- Click button "Sign In"`, the framework resolves the element using accessibility heuristics without writing a single line of Python/JS glue code.
 3. **Self-Healing Safeguards**: When frontend engineers tweak button text or redesign UI layouts, our hybrid heuristic & LLM engine heals selectors on-the-fly and outputs `git apply`-compatible patch diffs.
 4. **Zero-Overhead**: Executes with **~0% overhead** compared to hand-written async Playwright scripts.
-
----
-
-## 🏗️ System Architecture
-
-```mermaid
-flowchart TD
-    subgraph Input ["1. Input Specifications"]
-        MD["Markdown Spec (.test.md / .spec.md)"]
-    end
-
-    subgraph Parsing ["2. Parser & Compiler Layer"]
-        AST["Markdown AST Extractor (markdown-it-py)"]
-        DSL["Lark Natural-Language DSL Compiler (Earley Grammar)"]
-        MD --> AST --> DSL
-    end
-
-    subgraph State ["3. State & Variable Engine"]
-        VAR["VariableStore (Jinja {{VAR}} & Shell ${VAR})"]
-        GEN["Built-in Generators (RANDOM_STRING, EMAIL, TIMESTAMP)"]
-        ENV["Environment Mapping (ENV_*)"]
-        DSL --> VAR
-        GEN --> VAR
-        ENV --> VAR
-    end
-
-    subgraph LocatorLayer ["4. Semantic Accessibility Locators"]
-        LOC["Priority Chain Locator Resolver (.or_() Lazy Evaluation)"]
-        ARIA["ARIA Roles & Labels"]
-        PH["Placeholders & Text"]
-        RAW["Raw CSS / XPath Selectors"]
-        VAR --> LOC
-        ARIA --> LOC
-        PH --> LOC
-        RAW --> LOC
-    end
-
-    subgraph ExecutionLayer ["5. Playwright Execution Engine"]
-        PW["Playwright Session Context (Chromium / Firefox / WebKit)"]
-        HOOKS["Python Setup / Teardown Hooks"]
-        DEBUG["Interactive Step Debugger (Live Element Highlighting)"]
-        LOC --> PW
-        HOOKS --> PW
-        DEBUG --> PW
-    end
-
-    subgraph HealingLayer ["6. Self-Healing & AI Fallback"]
-        TIMEOUT["Timeout Interceptor"]
-        DOM["Client-Side Visible DOM Snapshotter"]
-        L1["Level 1: SequenceMatcher Fuzzy Heuristics (5 Safeguards)"]
-        L2["Level 2: Lightweight LLM Fallback (Optional)"]
-        CACHE[".md_e2e_cache.json Persistence & Stale Busting"]
-        DIFF["Unified Git Apply Patch Diff Generator"]
-        
-        PW -- On Timeout --> TIMEOUT --> DOM --> L1
-        L1 -- Below Threshold / Ambiguous --> L2
-        L1 -- Match Found --> CACHE --> PW
-        L2 -- Resolved --> CACHE --> PW
-        CACHE --> DIFF
-    end
-
-    subgraph ReportingLayer ["7. Living Documentation & CI/CD Reports"]
-        REP_MD["Markdown Summary (summary.md) with PR Badges & Checklists"]
-        REP_HTML["Interactive HTML Dashboard (report.html) with Traces, Videos & Console Logs"]
-        CI["GitHub Actions Workflow ($GITHUB_STEP_SUMMARY)"]
-        PW --> REP_MD --> CI
-        PW --> REP_HTML --> CI
-    end
-```
 
 ---
 
@@ -599,49 +528,6 @@ jobs:
           name: e2e-html-report
           path: report.html
 ```
-
----
-
-## ⚡ Performance Benchmarks
-
-`md-e2e` is engineered with high-performance parsing and lazy locator evaluation. We benchmarked `md-e2e` against raw, hand-written async Playwright scripts over 20 repeated scenario iterations using browser process reuse:
-
-```text
-============================================================
- md-e2e Performance Benchmark Results
-============================================================
-Raw Playwright average per iteration: 133.46 ms
-md-e2e average per iteration:         124.03 ms
-------------------------------------------------------------
-Execution Overhead per iteration:     -9.42 ms (-7.06%)
-============================================================
-```
-
-*Conclusion: md-e2e introduces **~0% execution overhead** over native Playwright while offering living documentation, zero glue-code, self-healing, and interactive debugging.*
-
----
-
-## ❓ Frequently Asked Questions (FAQ)
-
-<details>
-<summary><b>Q: Do I need to learn Gherkin syntax (Given/When/Then)?</b></summary>
-<p>No! md-e2e uses standard Markdown bullet points. You can write natural phrases like <code>- Click button "Sign In"</code> or <code>- Fill input "Email" with "test@ex.com"</code> without rigid Given/When/Then constraints.</p>
-</details>
-
-<details>
-<summary><b>Q: Can I use CSS or XPath selectors if I want to?</b></summary>
-<p>Yes! Whenever a target string starts with <code>#</code>, <code>.</code>, <code>//</code>, <code>xpath=</code>, <code>css=</code>, or <code>data-testid=</code>, md-e2e automatically recognizes it as a raw selector and bypasses accessibility resolution.</p>
-</details>
-
-<details>
-<summary><b>Q: How does md-e2e handle flaky network requests?</b></summary>
-<p>Playwright automatically auto-waits for elements to become visible, enabled, and stable before performing clicks or fills. Additionally, you can specify <code>- Wait for network idle</code> or <code>- Wait 3 seconds</code> when dealing with asynchronous background operations.</p>
-</details>
-
-<details>
-<summary><b>Q: Can I run tests in parallel?</b></summary>
-<p>Yes! With Pytest integration, simply install <code>pytest-xdist</code> and run <code>pytest -n auto</code> to parallelize across multiple CPU cores.</p>
-</details>
 
 ---
 
