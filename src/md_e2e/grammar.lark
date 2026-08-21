@@ -26,6 +26,7 @@ start: step
      | assert_url
      | assert_title
      | assert_value
+     | assert_variable
      | wait_seconds
      | wait_network
      | store_var
@@ -58,6 +59,7 @@ assert_url:     ASSERT_URL_KW CMP QSTR
 assert_title:   ASSERT_TITLE_KW CMP QSTR
 assert_value:   ASSERT_KW TARGET_TYPE QSTR VALUE_KW CMP QSTR
               | ASSERT_KW QSTR VALUE_KW CMP QSTR
+assert_variable: ASSERT_KW VARIABLE_KW QSTR CMP QSTR
 
 // ── State & Control ─────────────────────────────────────────────────────────
 wait_seconds: WAIT_KW NUMBER SECONDS_KW
@@ -82,7 +84,8 @@ ASSERT_TITLE_KW.5:  /(?i)assert\s+title/
 IS_VISIBLE.5:       /(?i)is\s+visible/
 IS_HIDDEN.5:        /(?i)is\s+hidden/
 WAIT_NETWORK_KW.5:  /(?i)wait\s+for\s+network\s+idle/
-STORE_FROM_KW.5:    /(?i)store\s+text\s+from/
+STORE_FROM_KW.5:    /(?i)store(?:\s+text)?\s+from/
+VARIABLE_KW.5:      /(?i)variable/
 
 // Single-word keywords
 CLICK_KW.3:    /(?i)click/
@@ -100,7 +103,7 @@ TO_KW.3:       /(?i)to/
 AS_KW.3:       /(?i)as/
 VALUE_KW.3:    /(?i)value/
 SECONDS_KW.3:  /(?i)seconds?/
-CMP.3:         /(?i)(?:matches|contains|is)/
+CMP.3:         /(?i)(?:matches|contains|equals|equal|is)/
 
 // Element-type hints — lower priority so they lose to keywords above
 TARGET_TYPE.2: /(?i)(?:button|link|input|heading|checkbox|radio|text)/

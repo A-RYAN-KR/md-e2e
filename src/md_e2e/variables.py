@@ -56,11 +56,13 @@ _BUILTIN_GENERATORS: dict[str, Callable[..., str]] = {
 # Variable pattern
 # ---------------------------------------------------------------------------
 
-# Matches  {{ name }}  or  {{name}}  or  ${ name }  or  ${name}
+# Matches  {{ name }}  or  {{name}}  or  ${ name }  or  ${name}  or  <name>
 _VAR_PATTERN = re.compile(
     r"\{\{\s*(?P<jinja>\w+)\s*\}\}"
     r"|"
-    r"\$\{\s*(?P<shell>\w+)\s*\}",
+    r"\$\{\s*(?P<shell>\w+)\s*\}"
+    r"|"
+    r"<(?P<angle>\w+)>",
 )
 
 
@@ -139,7 +141,7 @@ class VariableStore:
             If any referenced variable is not defined.
         """
         def _replacer(m: re.Match) -> str:
-            name = m.group("jinja") or m.group("shell")
+            name = m.group("jinja") or m.group("shell") or m.group("angle")
             try:
                 return self.get(name)
             except UndefinedVariableError:

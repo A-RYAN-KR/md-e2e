@@ -97,10 +97,17 @@ def resolve_locator(
             ).first
 
         case TargetType.LINK:
+            if identifier.startswith("http://") or identifier.startswith("https://") or identifier.startswith("/"):
+                return (
+                    page.locator(f'a[href*="{css_escaped}" i]')
+                    .or_(page.locator(f'a[href="{css_escaped}"]'))
+                    .or_(page.locator("a:visible").filter(has_text=re.compile(re.escape(identifier), re.IGNORECASE)))
+                ).first
             return (
                 page.locator("a:visible").filter(has_text=re.compile(re.escape(identifier), re.IGNORECASE))
                 .or_(page.get_by_role("link", name=pattern))
                 .or_(page.get_by_role("link", name=re.compile(re.escape(identifier), re.IGNORECASE)))
+                .or_(page.locator(f'a[href*="{css_escaped}" i]'))
             ).first
 
         case TargetType.HEADING:

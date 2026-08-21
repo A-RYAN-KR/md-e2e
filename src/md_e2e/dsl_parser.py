@@ -43,11 +43,13 @@ def _get_parser() -> Lark:
 # Variable detection & normalisation
 # ---------------------------------------------------------------------------
 
-# Matches  {{ name }}  or  {{name}}  or  ${ name }  or  ${name}
+# Matches  {{ name }}  or  {{name}}  or  ${ name }  or  ${name}  or  <name>
 _VAR_PATTERN = re.compile(
     r"\{\{\s*(?P<jinja>\w+)\s*\}\}"  # Jinja-style
     r"|"
-    r"\$\{\s*(?P<shell>\w+)\s*\}",  # Shell-style
+    r"\$\{\s*(?P<shell>\w+)\s*\}"   # Shell-style
+    r"|"
+    r"<(?P<angle>\w+)>",            # Scenario outline table style
 )
 
 
@@ -56,7 +58,7 @@ def _extract_variables(text: str) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
     for m in _VAR_PATTERN.finditer(text):
-        name = m.group("jinja") or m.group("shell")
+        name = m.group("jinja") or m.group("shell") or m.group("angle")
         if name and name not in seen:
             seen.add(name)
             result.append(name)
@@ -287,6 +289,18 @@ class _StepTransformer(Transformer):
         return {
             "action_type": ActionType.ASSERT_VALUE,
             "target_identifier": field_name,
+            "value": f"{cmp_mode}:{expected}",
+        }
+
+    def assert_variable(self, items):
+        meaningful = _filter_items(items)
+        # meaningful: QSTR(var_name) + CMP + QSTR(expected)
+        var_name = _strip_quotes(meaningful[0])
+        cmp_mode = str(meaningful[1]).strip().lower()
+        expected = _strip_quotes(meaningful[2])
+        return {
+            "action_type": ActionType.ASSERT_VARIABLE,
+            "target_identifier": var_name,
             "value": f"{cmp_mode}:{expected}",
         }
 

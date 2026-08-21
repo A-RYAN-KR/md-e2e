@@ -284,6 +284,10 @@ async def _dispatch_action(
             # target = field name, value = "cmp:expected"
             await _assert_value(page, step, t_str, v_str)
 
+        case ActionType.ASSERT_VARIABLE:
+            # target = variable name, value = "cmp:expected"
+            _assert_variable_value(store, t_str, v_str)
+
         # ── State & Control ──────────────────────────────────────────
         case ActionType.WAIT:
             if v_str == "network_idle":
@@ -307,6 +311,29 @@ async def _dispatch_action(
 
         case _:
             raise StepNotImplementedError(step)
+
+
+def _assert_variable_value(
+    store: VariableStore,
+    var_name: str,
+    raw_value: str,
+) -> None:
+    """Assert stored variable value against expected value."""
+    if ":" in raw_value:
+        cmp_mode, expected = raw_value.split(":", 1)
+    else:
+        cmp_mode, expected = "is", raw_value
+
+    actual = store.get(var_name)
+    cmp_lower = cmp_mode.lower()
+    if cmp_lower in ("is", "equals", "equal", "=="):
+        assert actual == expected, f"Expected variable '{var_name}' to equal '{expected}', but got '{actual}'"
+    elif cmp_lower in ("contains", "contain"):
+        assert expected in actual, f"Expected variable '{var_name}' ('{actual}') to contain '{expected}'"
+    elif cmp_lower in ("matches", "match"):
+        assert re.search(expected, actual), f"Expected variable '{var_name}' ('{actual}') to match regex '{expected}'"
+    else:
+        assert actual == expected, f"Expected variable '{var_name}' to equal '{expected}', but got '{actual}'"
 
 
 async def _assert_url(page: Page, cmp_mode: str, expected: str) -> None:

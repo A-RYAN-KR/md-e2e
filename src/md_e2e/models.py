@@ -38,6 +38,7 @@ class ActionType(StrEnum):
     ASSERT_TITLE = "ASSERT_TITLE"
     ASSERT_VALUE = "ASSERT_VALUE"
     ASSERT_COUNT = "ASSERT_COUNT"
+    ASSERT_VARIABLE = "ASSERT_VARIABLE"
 
     # State & Control
     WAIT = "WAIT"
