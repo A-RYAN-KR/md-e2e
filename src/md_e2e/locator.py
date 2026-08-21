@@ -113,10 +113,18 @@ def resolve_locator(
             ).first
 
         case TargetType.INPUT:
+            contains_pattern = re.compile(re.escape(identifier), re.IGNORECASE)
             return (
-                page.get_by_label(pattern)
+                page.get_by_role("textbox", name=pattern)
+                .or_(page.get_by_role("searchbox", name=pattern))
                 .or_(page.get_by_placeholder(pattern))
-                .or_(page.get_by_role("textbox", name=pattern))
+                .or_(page.locator(
+                    f'input[type="search"], input[name="{css_escaped}" i], input[id="{css_escaped}" i], '
+                    f'textarea[name="{css_escaped}" i], input[placeholder*="{css_escaped}" i], input[aria-label*="{css_escaped}" i]'
+                ))
+                .or_(page.get_by_placeholder(contains_pattern))
+                .or_(page.get_by_role("textbox", name=contains_pattern))
+                .or_(page.get_by_label(pattern))
             ).first
 
         case TargetType.TEXT:
