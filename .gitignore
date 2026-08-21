@@ -1,24 +1,40 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-*.egg-info/
-dist/
-build/
 
-# Virtual Environment
+# Packaging and Build Artifacts
+build/
+bdist.*/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Virtual Environments
 venv/
 .venv/
 env/
+ENV/
 
-# Caches & Tools
+# Testing & Quality Caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 .md_e2e_cache.json
 
-# Test outputs
+# Test Output Artifacts & Traces
 *.zip
 failure_trace.zip
 summary.md
 report.html
+*.webm
+*.png
+
+# IDEs & System Files
+.idea/
+.vscode/
+*.swp
+.DS_Store
