@@ -256,7 +256,16 @@ async def _dispatch_action(
         # ── Assertions ───────────────────────────────────────────────
         case ActionType.ASSERT_VISIBLE:
             locator = resolve_locator(page, step.target_type, t_str)
-            await expect(locator).to_be_visible()
+            try:
+                await expect(locator).to_be_visible()
+            except Exception as e:
+                # If first resolved element was hidden in DOM, check if any matching element is visible
+                pattern = re.compile(re.escape(t_str), re.IGNORECASE)
+                visible_fallback = page.locator("*:visible").filter(has_text=pattern).first
+                try:
+                    await expect(visible_fallback).to_be_visible()
+                except Exception:
+                    raise e
 
         case ActionType.ASSERT_HIDDEN:
             locator = resolve_locator(page, step.target_type, t_str)

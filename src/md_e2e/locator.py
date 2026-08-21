@@ -97,13 +97,18 @@ def resolve_locator(
             ).first
 
         case TargetType.LINK:
-            return page.get_by_role("link", name=pattern).or_(
-                page.get_by_role("link", name=re.compile(re.escape(identifier), re.IGNORECASE))
+            return (
+                page.locator("a:visible").filter(has_text=re.compile(re.escape(identifier), re.IGNORECASE))
+                .or_(page.get_by_role("link", name=pattern))
+                .or_(page.get_by_role("link", name=re.compile(re.escape(identifier), re.IGNORECASE)))
             ).first
 
         case TargetType.HEADING:
-            return page.get_by_role("heading", name=pattern).or_(
-                page.get_by_role("heading", name=re.compile(re.escape(identifier), re.IGNORECASE))
+            return (
+                page.locator("h1:visible, h2:visible, h3:visible, h4:visible, h5:visible, h6:visible, [role=heading]:visible")
+                .filter(has_text=re.compile(re.escape(identifier), re.IGNORECASE))
+                .or_(page.get_by_role("heading", name=pattern))
+                .or_(page.get_by_role("heading", name=re.compile(re.escape(identifier), re.IGNORECASE)))
             ).first
 
         case TargetType.CHECKBOX:
@@ -132,14 +137,20 @@ def resolve_locator(
             ).first
 
         case TargetType.TEXT:
-            return page.get_by_text(re.compile(re.escape(identifier), re.IGNORECASE)).first
+            contains_pattern = re.compile(re.escape(identifier), re.IGNORECASE)
+            return (
+                page.locator("*:visible").filter(has_text=contains_pattern)
+                .or_(page.get_by_text(contains_pattern))
+            ).first
 
         case TargetType.GENERIC | _:
             # Comprehensive semantic fallback
+            contains_pattern = re.compile(re.escape(identifier), re.IGNORECASE)
             return (
-                page.get_by_label(pattern)
+                page.locator("*:visible").filter(has_text=contains_pattern)
+                .or_(page.get_by_label(pattern))
                 .or_(page.get_by_placeholder(pattern))
                 .or_(page.get_by_role("button", name=pattern))
                 .or_(page.get_by_role("link", name=pattern))
-                .or_(page.get_by_text(re.compile(re.escape(identifier), re.IGNORECASE)))
+                .or_(page.get_by_text(contains_pattern))
             ).first
