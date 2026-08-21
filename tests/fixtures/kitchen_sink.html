@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitchen Sink E2E Test Application</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #22c55e;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 2rem; }
+        .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+        h1 { grid-column: 1 / -1; margin-bottom: 1rem; color: #a5b4fc; font-size: 2rem; }
+        h2 { margin-bottom: 1rem; font-size: 1.25rem; color: #e2e8f0; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+        
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.35rem; color: var(--text-muted); }
+        input[type="text"], input[type="email"], input[type="password"], input[type="search"], textarea, select {
+            width: 100%; padding: 0.6rem 0.8rem; background: #0b0f19; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.95rem;
+        }
+        input:focus, textarea:focus, select:focus { outline: none; border-color: var(--primary); ring: 2px solid var(--primary); }
+        
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 0.6rem 1.2rem; font-size: 0.9rem; font-weight: 600; border-radius: 6px; cursor: pointer; border: none; transition: 0.2s ease;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        
+        .tab-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
+        .tab-btn { padding: 0.5rem 1rem; background: none; border: none; color: var(--text-muted); cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: #a5b4fc; border-bottom-color: var(--primary); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .toast {
+            position: fixed; bottom: 2rem; right: 2rem; padding: 1rem 1.5rem;
+            background: #1e293b; border: 1px solid var(--success); color: var(--success);
+            border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            display: none; animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        .badge { display: inline-block; padding: 0.2rem 0.5rem; font-size: 0.75rem; border-radius: 4px; font-weight: 700; }
+        .badge-success { background: #064e3b; color: #34d399; }
+
+        table.data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        table.data-table th, table.data-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+        table.data-table th { background: #0b0f19; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; }
+
+        .spinner {
+            border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--primary);
+            border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; display: none; margin: 1rem auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .hover-popover { position: relative; display: inline-block; }
+        .popover-box {
+            display: none; position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%);
+            background: #334155; color: white; padding: 0.5rem 0.8rem; border-radius: 6px; font-size: 0.8rem; white-space: nowrap; z-index: 10;
+        }
+        .hover-popover:hover .popover-box { display: block; }
+    </style>
+</head>
+<body>
+    <h1>Kitchen Sink E2E Demo Platform</h1>
+    <div class="container">
+        <!-- 1. Authentication & Form Controls -->
+        <div class="card" id="card-auth">
+            <h2>User Authentication & Registration</h2>
+            <form id="login-form" onsubmit="event.preventDefault(); handleLogin();">
+                <div class="form-group">
+                    <label for="username-input">Username</label>
+                    <input type="text" id="username-input" name="username" placeholder="Enter your username" required />
+                </div>
+                <div class="form-group">
+                    <label for="email-input">Email Address</label>
+                    <input type="email" id="email-input" name="email" placeholder="name@company.com" required />
+                </div>
+                <div class="form-group">
+                    <label for="password-input">Password</label>
+                    <input type="password" id="password-input" name="password" placeholder="••••••••" required />
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="terms-checkbox" name="terms" /> I agree to the terms and privacy policy
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Account Role:</label>
+                    <label style="display:inline-block; margin-right:1rem;">
+                        <input type="radio" name="role" value="developer" id="role-dev" checked /> Developer
+                    </label>
+                    <label style="display:inline-block;">
+                        <input type="radio" name="role" value="admin" id="role-admin" /> Administrator
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="department-select">Department</label>
+                    <select id="department-select" name="department">
+                        <option value="eng">Engineering</option>
+                        <option value="qa">Quality Assurance</option>
+                        <option value="sec">Security & Compliance</option>
+                    </select>
+                </div>
+                <button type="submit" id="btn-submit" class="btn btn-primary" data-testid="login-submit-button">Sign In Account</button>
+            </form>
+            <div id="auth-result" style="display: none; margin-top: 1rem; padding: 0.8rem; background: #064e3b; border-radius: 6px;">
+                <span id="auth-status-text">Welcome back, <b id="user-display"></b>!</span>
+                <p id="generated-session" style="font-size:0.8rem; color:#a7f3d0; margin-top:0.3rem;">Session Token: <span id="session-id">AUTH-98765-SECURE</span></p>
+            </div>
+        </div>
+
+        <!-- 2. Dynamic Asynchronous Data & State -->
+        <div class="card" id="card-async">
+            <h2>Async Data Fetching & State</h2>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">Trigger delayed network responses and observe element transitions.</p>
+            
+            <button id="btn-fetch" class="btn btn-outline" onclick="fetchOrderDetails()">Load Order Records</button>
+            <div id="loader" class="spinner"></div>
+
+            <div id="order-container" style="display:none; margin-top:1rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                    <span style="font-size:1.1rem; font-weight:700;" id="order-number-title">Order #ORD-77492</span>
+                    <span class="badge badge-success" id="order-status-badge">Fulfilled</span>
+                </div>
+                <p style="font-size:0.9rem; color:var(--text-muted);">Amount Billed: <b id="order-amount">$149.99 USD</b></p>
+            </div>
+
+            <div style="margin-top: 2rem;">
+                <h2>Interactive Tooltips & Hover</h2>
+                <div class="hover-popover">
+                    <button class="btn btn-outline" id="btn-hover-target">Hover For Secret</button>
+                    <div class="popover-box" id="popover-content">Secret Passcode: OMEGA-42</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Tabs & Interactive Navigation -->
+        <div class="card" id="card-tabs">
+            <h2>Tabbed Application Views</h2>
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchTab(0)" id="tab-overview">Overview</button>
+                <button class="tab-btn" onclick="switchTab(1)" id="tab-settings">Settings</button>
+                <button class="tab-btn" onclick="switchTab(2)" id="tab-logs">Audit Logs</button>
+            </div>
+            <div class="tab-content active" id="content-overview">
+                <h3>System Status: Normal</h3>
+                <p style="color:var(--text-muted); margin-top:0.5rem;">All nodes operating within normal latency parameters.</p>
+            </div>
+            <div class="tab-content" id="content-settings">
+                <h3>Global Configuration</h3>
+                <label style="margin-top:0.5rem;">
+                    <input type="checkbox" id="chk-dark-mode" checked /> Dark Theme Enabled
+                </label>
+                <br/>
+                <label style="margin-top:0.5rem;">
+                    <input type="checkbox" id="chk-auto-healing" checked /> Self-Healing Active
+                </label>
+            </div>
+            <div class="tab-content" id="content-logs">
+                <h3>Security Event Stream</h3>
+                <p style="color:var(--text-muted);">Log entry 2026-08-21: Handshake verified.</p>
+            </div>
+        </div>
+
+        <!-- 4. Data Matrix Table & Filtering -->
+        <div class="card" id="card-matrix">
+            <h2>Inventory Records Matrix</h2>
+            <div class="form-group" style="margin-bottom:0.5rem;">
+                <input type="search" id="table-search" placeholder="Filter records by SKU..." oninput="filterTable()" />
+            </div>
+            <table class="data-table" id="inventory-table">
+                <thead>
+                    <tr>
+                        <th>SKU Code</th>
+                        <th>Product Name</th>
+                        <th>Stock Level</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>SKU-101</td>
+                        <td>Quantum Keyboard</td>
+                        <td>24 in stock</td>
+                        <td><button class="btn btn-outline" style="padding:0.2rem 0.5rem;" onclick="showToast('Item SKU-101 Selected')">Select</button></td>
+                    </tr>
+                    <tr>
+                        <td>SKU-202</td>
+                        <td>Precision Mouse</td>
+                        <td>12 in stock</td>
+                        <td><button class="btn btn-outline" style="padding:0.2rem 0.5rem;" onclick="showToast('Item SKU-202 Selected')">Select</button></td>
+                    </tr>
+                    <tr>
+                        <td>SKU-303</td>
+                        <td>UltraWide Monitor</td>
+                        <td>8 in stock</td>
+                        <td><button class="btn btn-outline" style="padding:0.2rem 0.5rem;" onclick="showToast('Item SKU-303 Selected')">Select</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="app-toast" class="toast">
+        <span id="toast-message">Action Successful!</span>
+    </div>
+
+    <script>
+        function handleLogin() {
+            const user = document.getElementById('username-input').value;
+            document.getElementById('user-display').textContent = user;
+            document.getElementById('auth-result').style.display = 'block';
+            showToast("Successfully signed in as " + user);
+        }
+
+        function fetchOrderDetails() {
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('order-container').style.display = 'none';
+            setTimeout(() => {
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('order-container').style.display = 'block';
+            }, 600);
+        }
+
+        function switchTab(index) {
+            const tabs = document.querySelectorAll('.tab-btn');
+            const contents = document.querySelectorAll('.tab-content');
+            tabs.forEach((t, idx) => {
+                t.classList.toggle('active', idx === index);
+                contents[idx].classList.toggle('active', idx === index);
+            });
+        }
+
+        function filterTable() {
+            const q = document.getElementById('table-search').value.toLowerCase();
+            const rows = document.querySelectorAll('#inventory-table tbody tr');
+            rows.forEach(r => {
+                const text = r.textContent.toLowerCase();
+                r.style.display = text.includes(q) ? '' : 'none';
+            });
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('app-toast');
+            document.getElementById('toast-message').textContent = msg;
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; }, 3000);
+        }
+    </script>
+</body>
+</html>

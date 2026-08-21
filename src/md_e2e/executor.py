@@ -88,6 +88,10 @@ class SuiteResult:
         return len(self.scenario_results)
 
     @property
+    def total_scenarios(self) -> int:
+        return len(self.scenario_results)
+
+    @property
     def status(self) -> StepStatus:
         if any(r.status == StepStatus.FAILED for r in self.scenario_results):
             return StepStatus.FAILED
