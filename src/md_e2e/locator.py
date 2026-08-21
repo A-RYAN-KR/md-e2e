@@ -146,7 +146,7 @@ def resolve_locator(
         case TargetType.TEXT:
             contains_pattern = re.compile(re.escape(identifier), re.IGNORECASE)
             return (
-                page.locator("*:visible").filter(has_text=contains_pattern)
+                page.get_by_text(pattern)
                 .or_(page.get_by_text(contains_pattern))
             ).first
 
@@ -154,10 +154,10 @@ def resolve_locator(
             # Comprehensive semantic fallback
             contains_pattern = re.compile(re.escape(identifier), re.IGNORECASE)
             return (
-                page.locator("*:visible").filter(has_text=contains_pattern)
+                page.get_by_role("button", name=pattern)
+                .or_(page.get_by_role("link", name=pattern))
                 .or_(page.get_by_label(pattern))
                 .or_(page.get_by_placeholder(pattern))
-                .or_(page.get_by_role("button", name=pattern))
-                .or_(page.get_by_role("link", name=pattern))
+                .or_(page.get_by_text(pattern))
                 .or_(page.get_by_text(contains_pattern))
             ).first
