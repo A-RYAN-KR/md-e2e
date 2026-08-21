@@ -99,9 +99,12 @@ class VariableStore:
         UndefinedVariableError
             If the variable cannot be resolved through any source.
         """
-        # 1. Explicitly stored
+        # 1. Explicitly stored (exact or case-insensitive)
         if name in self._data:
             return self._data[name]
+        for k, v in self._data.items():
+            if k.lower() == name.lower():
+                return v
 
         # 2. Built-in generators
         if name in _BUILTIN_GENERATORS:

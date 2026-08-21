@@ -228,7 +228,10 @@ async def _dispatch_action(
             # target_identifier = dropdown, value = option to select
             tt = TargetType.INPUT if step.target_type == TargetType.GENERIC else step.target_type
             locator = resolve_locator(page, tt, t_str)
-            await locator.select_option(label=v_str)
+            try:
+                await locator.select_option(label=v_str)
+            except Exception:
+                await locator.select_option(value=v_str)
 
         case ActionType.HOVER:
             locator = resolve_locator(page, step.target_type, t_str)
