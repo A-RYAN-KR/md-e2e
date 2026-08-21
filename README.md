@@ -267,29 +267,12 @@ Capture text dynamically from one step and reuse it in downstream steps:
 
 ## 🛡️ Self-Healing & AI Fallback Engine
 
-Frontend UI refactors (renamed buttons, updated CSS classes, changed accessibility labels) frequently break conventional automation suites. `md-e2e` features a **Hybrid 2-Tier Self-Healing Engine** designed to maintain test stability without masking real application bugs.
+Frontend UI refactors (renamed buttons, updated CSS classes, changed accessibility labels) frequently break conventional automation suites. `md-e2e` features a **Hybrid 2-Tier Self-Healing Engine** designed to maintain test stability without masking real application bugs:
 
-```mermaid
-flowchart TD
-    FAIL["💥 Step Timeout / Element Not Found"] --> SNAP["📸 Capture Visible Client-Side DOM Snapshot"]
-    SNAP --> TIER1{"🔍 Tier 1: Local Fuzzy Heuristics"}
-
-    TIER1 -- "Match Confirmed (>= 0.70 score)" --> EXEC["⚡ Execute Healed Action"]
-    TIER1 -- "Ambiguous or No Match" --> TIER2{"🤖 Tier 2: LLM Fallback (Opt-in)"}
-
-    TIER2 -- "Resolved Intent" --> EXEC
-    TIER2 -- "Unresolvable" --> ERR["❌ Fail Safely with Diagnostic Trace"]
-
-    EXEC --> CACHE["💾 Cache Selector in .md_e2e_cache.json"]
-    CACHE --> PATCH["📝 Generate 'git apply' Patch Diff"]
-
-    style FAIL fill:#450a0a,stroke:#ef4444,stroke-width:2px,color:#fecaca
-    style EXEC fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#a7f3d0
-    style ERR fill:#3b0764,stroke:#a855f7,stroke-width:2px,color:#f3e8ff
-    style PATCH fill:#1e1b4b,stroke:#6366f1,stroke-width:2px,color:#e0e7ff
-```
-
----
+1. **Step Timeout Interception**: When a Playwright locator times out, `md-e2e` intercepts the failure and captures a visible client-side DOM snapshot.
+2. **Tier 1 (Local Heuristics)**: Evaluates candidates using sequence matching algorithms strictly bounded by 5 production safeguards.
+3. **Tier 2 (AI / LLM Fallback)**: If heuristics are ambiguous or score below threshold, an opt-in LLM analyzes step intent against the active DOM.
+4. **Execution & Caching**: The healed action executes immediately, is cached in `.md_e2e_cache.json` for zero-overhead re-runs, and generates a unified `git apply` patch diff.
 
 ### 🔒 5 Critical Production Safeguards
 
