@@ -99,10 +99,10 @@ def _parse_table_tokens(tokens: list, start_idx: int) -> tuple[list[dict[str, st
             current_row = []
         elif tok.type == "tr_close":
             if in_head:
-                headers = current_row
+                headers = [h.strip() for h in current_row]
             elif in_body and headers:
                 row_dict = {
-                    h: current_row[col_idx] if col_idx < len(current_row) else ""
+                    h.strip(): (current_row[col_idx].strip() if col_idx < len(current_row) else "")
                     for col_idx, h in enumerate(headers)
                 }
                 rows.append(row_dict)
