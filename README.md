@@ -267,43 +267,41 @@ Capture text dynamically from one step and reuse it in downstream steps:
 
 ## 🛡️ Self-Healing & AI Fallback Engine
 
-Frontend UI refactors (renamed buttons, updated CSS classes, changed aria-labels) frequently break conventional automation tests. `md-e2e` incorporates a **Hybrid 2-Tier Self-Healing Engine**.
+Frontend UI refactors (renamed buttons, updated CSS classes, changed accessibility labels) frequently break conventional automation suites. `md-e2e` features a **Hybrid 2-Tier Self-Healing Engine** designed to maintain test stability without masking real application bugs.
 
-```text
-[Step Failed: Playwright Timeout]
-               │
-               ▼
-[Capture Visible Client-Side DOM Snapshot]
-               │
-               ▼
-┌────────────────────────────────────────────────────────┐
-│  Tier 1: Heuristic SequenceMatcher Fuzzy Matcher       │
-│  ─────────────────────────────────────────────         │
-│  1. Similarity Score >= 0.70                           │
-│  2. Role & Tag Confinement (Button -> Button only)     │
-│  3. Ambiguity Delta >= 0.12 lead over 2nd candidate   │
-│  4. Opposing Verb Guard (e.g. Reject Delete <-> Save)  │
-│  5. Negative Assertion Bypass (Never heal Hidden)      │
-└────────────────────────────────────────────────────────┘
-         │                               │
-    [Match Found]                [No Match / Ambiguous]
-         │                               │
-         │                               ▼
-         │               ┌───────────────────────────────┐
-         │               │ Tier 2: LLM Fallback (Opt-in) │
-         │               │ Analyzes step intent & DOM    │
-         │               └───────────────────────────────┘
-         │                               │
-         ▼                               ▼
-[Execute Healed Action] ──► [Cache in .md_e2e_cache.json] ──► [Output Git Diff Patch]
+```mermaid
+flowchart TD
+    FAIL["💥 Step Timeout / Element Not Found"] --> SNAP["📸 Capture Visible Client-Side DOM Snapshot"]
+    SNAP --> TIER1{"🔍 Tier 1: Local Fuzzy Heuristics"}
+
+    TIER1 -- "Match Confirmed (>= 0.70 score)" --> EXEC["⚡ Execute Healed Action"]
+    TIER1 -- "Ambiguous or No Match" --> TIER2{"🤖 Tier 2: LLM Fallback (Opt-in)"}
+
+    TIER2 -- "Resolved Intent" --> EXEC
+    TIER2 -- "Unresolvable" --> ERR["❌ Fail Safely with Diagnostic Trace"]
+
+    EXEC --> CACHE["💾 Cache Selector in .md_e2e_cache.json"]
+    CACHE --> PATCH["📝 Generate 'git apply' Patch Diff"]
+
+    style FAIL fill:#450a0a,stroke:#ef4444,stroke-width:2px,color:#fecaca
+    style EXEC fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#a7f3d0
+    style ERR fill:#3b0764,stroke:#a855f7,stroke-width:2px,color:#f3e8ff
+    style PATCH fill:#1e1b4b,stroke:#6366f1,stroke-width:2px,color:#e0e7ff
 ```
 
-### 5 Critical Production Safeguards:
-1. **Threshold Tuning**: Similarity score must be $\ge 0.70$ (`difflib.SequenceMatcher`).
-2. **Role & Type Confinement**: If the step specified `button "Submit"`, candidates are strictly confined to `<button>`, `<input type="submit">`, or `[role="button"]`. An `<a>` or `<div>` will never be matched.
-3. **Ambiguity Delta**: If candidate A scores 0.81 and candidate B scores 0.76, the difference is only 0.05 ($< 0.12$). The engine refuses to guess and fails safely.
-4. **Opposing Verb Guard**: Rejects matching opposite action pairs (e.g., `Delete` $\leftrightarrow$ `Save`, `Cancel` $\leftrightarrow$ `Confirm`, `Next` $\leftrightarrow$ `Back`).
-5. **Negative Assertion Bypass**: Negative assertions like `Assert button "Delete" is hidden` never trigger self-healing to avoid false passes on deleted elements.
+---
+
+### 🔒 5 Critical Production Safeguards
+
+To prevent false positives, `md-e2e` enforces strict deterministic validation before any heal is applied:
+
+| Safeguard | Rule & Threshold | Example Scenario & Behavior |
+| :--- | :--- | :--- |
+| **1. Similarity Threshold** | Confidence score must be $\ge 0.70$ (`difflib.SequenceMatcher`). | `"Submit Payment"` $\rightarrow$ `"Make Payment"` heals ($0.74$). Random strings are rejected. |
+| **2. Role & Tag Confinement** | Target elements must strictly preserve their semantic HTML tag/role. | A `button "Submit"` step will **only** match buttons (`<button>`, `input[type=submit]`, `[role=button]`), never `<a>` or `<div>`. |
+| **3. Ambiguity Delta** | Best candidate must lead 2nd candidate by $\ge 0.12$ margin. | If `Candidate A` scores $0.81$ and `Candidate B` scores $0.76$ ($\Delta = 0.05$), the engine refuses to guess and fails safely. |
+| **4. Opposing Verb Guard** | Never match conflicting antonym actions. | Prevents dangerous mix-ups: `Save` $\ne$ `Delete`, `Cancel` $\ne$ `Confirm`, `Next` $\ne$ `Back`. |
+| **5. Negative Assertion Bypass** | Negative assertions never trigger healing. | `Assert button "Delete" is hidden` never searches for alternative buttons to prevent false passes on deleted data. |
 
 ### 🤖 Configuring Level 2 (LLM) Fallback
 
