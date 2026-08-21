@@ -34,7 +34,7 @@ class TestActionTypeEnum:
             "PRESS", "UPLOAD", "CHECK", "UNCHECK",
             "ASSERT_VISIBLE", "ASSERT_HIDDEN", "ASSERT_URL",
             "ASSERT_TITLE", "ASSERT_VALUE", "ASSERT_COUNT",
-            "WAIT", "STORE_VARIABLE", "CUSTOM",
+            "ASSERT_VARIABLE", "WAIT", "STORE_VARIABLE", "CUSTOM",
         }
         assert set(ActionType.__members__.keys()) == expected
 

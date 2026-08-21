@@ -207,8 +207,15 @@ def parse_markdown(
                 suite.tags = tags
                 suite_desc_parts = []
             elif level == 2:
-                # Scenario heading
+                # Finalise previous case description
+                if current_case is not None and case_desc_parts and current_case.description is None:
+                    current_case.description = "\n\n".join(case_desc_parts)
+
                 in_suite_preamble = False
+                # Finalise suite description from preamble
+                if suite_desc_parts and suite.description is None:
+                    suite.description = "\n\n".join(suite_desc_parts)
+
                 case_name, case_tags = _extract_tags(heading_raw)
                 line = _token_line(tok)
                 current_case = TestCase(
@@ -275,6 +282,8 @@ def parse_markdown(
 
         # ── List items (test steps) ──────────────────────────────────────
         if tok.type == "list_item_open":
+            if current_case is not None and case_desc_parts and current_case.description is None:
+                current_case.description = "\n\n".join(case_desc_parts)
             case_has_steps = True
             # Walk forward to find the inline content of this list item
             i += 1

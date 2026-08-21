@@ -148,7 +148,6 @@ def resolve_locator(
             return (
                 page.get_by_text(pattern)
                 .or_(page.get_by_text(contains_pattern))
-                .or_(page.locator(f':has-text("{css_escaped}")'))
                 .or_(page.get_by_role("heading", name=pattern))
                 .or_(page.get_by_role("heading", name=contains_pattern))
             ).first
