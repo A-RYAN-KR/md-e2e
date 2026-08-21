@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Application</title>
+</head>
+<body>
+    <h1 id="main-heading">Welcome to the Test App</h1>
+    
+    <div>
+        <h2>Login Form</h2>
+        <form id="login-form">
+            <div>
+                <label for="email-input">Email</label>
+                <input type="email" id="email-input" placeholder="Enter your email" value="" />
+            </div>
+            <div>
+                <label for="password-input">Password</label>
+                <input type="password" id="password-input" placeholder="Enter your password" value="" />
+            </div>
+            <div>
+                <button type="submit" id="submit-button">Sign In</button>
+            </div>
+        </form>
+    </div>
+
+    <div>
+        <h2>Checkboxes & Radios</h2>
+        <label>
+            <input type="checkbox" id="remember-me-checkbox" /> Remember me
+        </label>
+        <br/>
+        <label>
+            <input type="checkbox" id="newsletter-checkbox" checked /> Subscribe to newsletter
+        </label>
+        <br/>
+        <label>
+            <input type="radio" name="gender" id="gender-male" value="male" /> Male
+        </label>
+        <label>
+            <input type="radio" name="gender" id="gender-female" value="female" /> Female
+        </label>
+    </div>
+
+    <div>
+        <h2>Select Options</h2>
+        <label for="dropdown-select">Dropdown</label>
+        <select id="dropdown-select">
+            <option value="A">Option A</option>
+            <option value="B">Option B</option>
+            <option value="C">Option C</option>
+        </select>
+    </div>
+
+    <div>
+        <h2>File Upload</h2>
+        <label for="file-input">File Input</label>
+        <input type="file" id="file-input" />
+    </div>
+
+    <div>
+        <h2>Actions & Hover</h2>
+        <button id="hover-button">Hover over me</button>
+        <span id="hover-text" style="display:none;">Help text visible!</span>
+        <script>
+            document.getElementById('hover-button').addEventListener('mouseenter', () => {
+                document.getElementById('hover-text').style.display = 'inline';
+            });
+            document.getElementById('hover-button').addEventListener('mouseleave', () => {
+                document.getElementById('hover-text').style.display = 'none';
+            });
+        </script>
+    </div>
+
+    <div>
+        <h2>Links</h2>
+        <a href="https://example.com" id="home-link">Home</a>
+    </div>
+
+    <div id="dynamic-area">
+        <span id="price-value"> $42.00 </span>
+    </div>
+</body>
+</html>

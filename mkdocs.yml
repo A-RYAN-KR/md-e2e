@@ -1,0 +1,19 @@
+site_name: md-e2e Documentation
+site_url: https://github.com/contributors/md-e2e
+repo_url: https://github.com/contributors/md-e2e
+theme:
+  name: material
+  palette:
+    primary: sky
+    accent: light blue
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - code.copy
+
+nav:
+  - Welcome: index.md
+  - Markdown DSL: dsl.md
+  - Standalone CLI: cli.md
+  - Self-Healing Engine: healing.md
+  - CI/CD Reporting: reporting.md

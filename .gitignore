@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Caches & Tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.md_e2e_cache.json
+
+# Test outputs
+*.zip
+failure_trace.zip
+summary.md
+report.html

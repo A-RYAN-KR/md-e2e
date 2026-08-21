@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "md-e2e"
+version = "0.1.0"
+description = "Zero-Glue-Code, Markdown-Based E2E Test Runner powered by Playwright"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "md-e2e contributors"},
+]
+keywords = ["testing", "e2e", "markdown", "playwright", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "markdown-it-py>=3.0",
+    "lark>=1.1",
+    "playwright>=1.40",
+    "typer>=0.9",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+md_e2e = ["*.lark"]
+
+[project.scripts]
+md-e2e = "md_e2e.cli:app"
+
+[project.entry-points."pytest11"]
+md_e2e = "md_e2e.pytest_plugin"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
