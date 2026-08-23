@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import io
+import sys
 from pathlib import Path
 from typing import Literal, cast
 
@@ -18,9 +21,160 @@ from .md_parser import parse_markdown_file
 app = typer.Typer(help="md-e2e E2E Test Automation Command Line Tool")
 
 
-def print_results_table(suite_results: list[SuiteResult]) -> bool:
+# ---------------------------------------------------------------------------
+# Windows UTF-8 stdout safety wrapper
+# ---------------------------------------------------------------------------
+
+def _ensure_utf8_stdout() -> None:
+    """Wrap sys.stdout/stderr in UTF-8 if on Windows with a non-UTF-8 codepage.
+
+    This prevents UnicodeEncodeError when Rich prints Unicode symbols
+    (→, ✓, 🛡️, 🔥) to cp1252 terminals.
+    """
+    if sys.platform == "win32":
+        for stream_name in ("stdout", "stderr"):
+            stream = getattr(sys, stream_name)
+            if hasattr(stream, "encoding") and (stream.encoding or "").lower() not in ("utf-8", "utf8"):
+                try:
+                    wrapped = io.TextIOWrapper(
+                        stream.buffer,
+                        encoding="utf-8",
+                        errors="replace",
+                        line_buffering=stream.line_buffering,
+                    )
+                    setattr(sys, stream_name, wrapped)
+                except Exception:
+                    pass  # If wrapping fails, fall through to Rich's own handling
+
+
+_ensure_utf8_stdout()
+
+
+def _safe_console() -> Console:
+    """Create a Rich Console that is safe for the current terminal."""
+    return Console(file=sys.stdout, highlight=False)
+
+
+# ---------------------------------------------------------------------------
+# conftest.py auto-discovery & loading
+# ---------------------------------------------------------------------------
+
+def _load_conftest_files(test_path: Path) -> list[Path]:
+    """Discover and import conftest.py files so @custom_step registrations are active.
+
+    Scans the test directory (and parents up to test_path) for conftest.py
+    files and dynamically imports them via importlib.
+    """
+    loaded: list[Path] = []
+
+    if test_path.is_file():
+        search_root = test_path.parent
+    else:
+        search_root = test_path
+
+    # Ensure the search root's parent is on sys.path so relative imports work
+    parent = str(search_root.parent.resolve())
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+
+    # Also ensure CWD is on sys.path
+    cwd = str(Path.cwd().resolve())
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
+    # Find all conftest.py files
+    conftest_files: list[Path] = []
+    if search_root.is_dir():
+        for p in search_root.rglob("conftest.py"):
+            conftest_files.append(p)
+    # Also check for conftest.py in the immediate directory if path is a file
+    if test_path.is_file():
+        candidate = test_path.parent / "conftest.py"
+        if candidate.exists() and candidate not in conftest_files:
+            conftest_files.append(candidate)
+
+    for conftest_path in sorted(conftest_files):
+        try:
+            resolved = conftest_path.resolve()
+            module_name = f"_md_e2e_conftest_{resolved.stem}_{hash(str(resolved)) & 0xFFFFFFFF:08x}"
+            spec = importlib.util.spec_from_file_location(module_name, str(resolved))
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+                loaded.append(conftest_path)
+                rprint(f"[dim]Loaded conftest: {conftest_path}[/dim]")
+        except Exception as e:
+            rprint(f"[yellow]Warning: Failed to load {conftest_path}: {e}[/yellow]")
+
+    return loaded
+
+
+# ---------------------------------------------------------------------------
+# Error message formatting
+# ---------------------------------------------------------------------------
+
+_MAX_ERROR_TABLE_LEN = 200
+_MAX_ERROR_DETAIL_LEN = 2000
+
+# Patterns that indicate Playwright verbose call log noise
+_PLAYWRIGHT_NOISE_MARKERS = [
+    "Call log:",
+    "waiting for",
+    "============",
+    "Locator resolved to",
+    "  - ",
+    "attempting",
+]
+
+
+def _format_step_error(error_str: str, verbose: bool = False) -> str:
+    """Clean up step error messages for display.
+
+    Strips Playwright call logs and internal tracebacks, keeping only the
+    core error type and message. In verbose mode, returns the full error.
+    """
+    if verbose or not error_str:
+        return error_str
+
+    lines = error_str.split("\n")
+    # Find where Playwright call log noise starts
+    clean_lines: list[str] = []
+    in_call_log = False
+    for line in lines:
+        stripped = line.strip()
+        if any(marker in stripped for marker in _PLAYWRIGHT_NOISE_MARKERS):
+            in_call_log = True
+            continue
+        if in_call_log and stripped.startswith("- "):
+            continue
+        if not stripped:
+            in_call_log = False
+        if not in_call_log:
+            clean_lines.append(line)
+
+    result = "\n".join(clean_lines).strip()
+    if len(result) > _MAX_ERROR_DETAIL_LEN:
+        result = result[:_MAX_ERROR_DETAIL_LEN] + "... [truncated]"
+    return result
+
+
+def _truncate_for_table(text: str) -> str:
+    """Truncate error text for display in the summary table."""
+    # Take first line only, and truncate
+    first_line = text.split("\n")[0].strip()
+    if len(first_line) > _MAX_ERROR_TABLE_LEN:
+        return first_line[:_MAX_ERROR_TABLE_LEN] + "..."
+    return first_line
+
+
+# ---------------------------------------------------------------------------
+# Results display
+# ---------------------------------------------------------------------------
+
+def print_results_table(suite_results: list[SuiteResult], verbose: bool = False) -> bool:
     """Print E2E test run outcomes in a beautiful Rich summary table."""
-    console = Console()
+    console = _safe_console()
     table = Table(
         title="Markdown E2E Test Execution Summary",
         show_header=True,
@@ -56,7 +210,8 @@ def print_results_table(suite_results: list[SuiteResult]) -> bool:
                 total_skipped += 1
             else:
                 status_str = "[red]FAILED[/red]"
-                error_str = sc.error or "Unknown failure"
+                raw_error = sc.error or "Unknown failure"
+                error_str = _truncate_for_table(_format_step_error(raw_error, verbose=verbose))
                 total_failed += 1
                 has_failures = True
 
@@ -69,6 +224,10 @@ def print_results_table(suite_results: list[SuiteResult]) -> bool:
         f"\n[bold]Totals:[/bold] {total_tests} scenarios "
         f"({total_passed} passed, {total_failed} failed{skip_summary}) in {total_duration / 1000:.2f}s"
     )
+
+    # Print detailed failure info with formatted errors
+    if has_failures and not verbose:
+        rprint("\n[dim]Tip: Use --verbose for full error traces[/dim]")
 
     if all_healing_events:
         from .healing import generate_healing_diff
@@ -160,8 +319,13 @@ def run(
     report_md: Path | None = typer.Option(None, "--report-md", help="Output path for Markdown summary report (e.g. summary.md)."),
     report_html: Path | None = typer.Option(None, "--report-html", help="Output path for interactive HTML dashboard (e.g. report.html)."),
     llm_api_key: str | None = typer.Option(None, "--llm-api-key", help="API key for Level 2 LLM self-healing fallback (e.g. OpenAI / OpenRouter)."),
+    clean_session: bool = typer.Option(False, "--clean-session", help="Isolate browser context and variables per scenario (no state bleed)."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full error traces including Playwright call logs."),
 ) -> None:
     """Execute Markdown E2E test suites found at the path."""
+    # Load conftest.py files BEFORE finding/executing tests
+    _load_conftest_files(path)
+
     test_files = find_test_files(path)
     if not test_files:
         rprint(f"[red]Error: No Markdown E2E tests found at path: {path}[/red]")
@@ -177,6 +341,7 @@ def run(
         timeout=timeout,
         enable_healing=healing,
         llm_api_key=llm_api_key,
+        clean_session=clean_session,
     )
 
     suite_results: list[SuiteResult] = []
@@ -216,7 +381,7 @@ def run(
         rprint(f"[bold green]Saved HTML dashboard report to:[/bold green] {report_html}")
 
     # Print pretty Rich outcomes summary table
-    has_failures = print_results_table(suite_results) or has_execution_error
+    has_failures = print_results_table(suite_results, verbose=verbose) or has_execution_error
 
     if has_failures:
         raise typer.Exit(code=1)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "md-e2e"
-version = "0.2.0"
+version = "0.3.0"
 description = "Zero-Glue-Code, Markdown-Based E2E Test Runner powered by Playwright"
 readme = "README.md"
 license = {text = "MIT"}
@@ -28,11 +28,11 @@ dependencies = [
     "playwright>=1.40",
     "typer>=0.9",
     "rich>=13.0",
+    "pytest>=7.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0",
     "pytest-asyncio",
     "build>=1.0.0",
     "twine>=4.0.0",

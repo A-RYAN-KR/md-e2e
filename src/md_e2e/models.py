@@ -42,6 +42,7 @@ class ActionType(StrEnum):
 
     # State & Control
     WAIT = "WAIT"
+    WAIT_URL = "WAIT_URL"
     STORE_VARIABLE = "STORE_VARIABLE"
 
     # Fallback for custom / unrecognised steps
@@ -58,6 +59,7 @@ class TargetType(StrEnum):
     TEXT = "TEXT"
     CHECKBOX = "CHECKBOX"
     RADIO = "RADIO"
+    TESTID = "TESTID"
     GENERIC = "GENERIC"
 
 

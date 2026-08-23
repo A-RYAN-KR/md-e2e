@@ -103,6 +103,61 @@ class SuiteResult:
 
 
 # ---------------------------------------------------------------------------
+# Error formatting
+# ---------------------------------------------------------------------------
+
+_NOISE_MARKERS = frozenset({
+    "Call log:",
+    "waiting for",
+    "============",
+    "Locator resolved to",
+    "attempting",
+})
+
+
+def _format_error(
+    exc: Exception,
+    step: TestStep,
+    file_path: Path | None = None,
+) -> str:
+    """Format a step execution error into a clean, readable message.
+
+    Strips Playwright call logs and verbose internal traces, keeping
+    the core error type, message, file location, and step text.
+    """
+    raw = f"{type(exc).__name__}: {exc}"
+    lines = raw.split("\n")
+
+    # Extract core error (first meaningful line)
+    clean_lines: list[str] = []
+    in_noise = False
+    for line in lines:
+        stripped = line.strip()
+        if any(marker in stripped for marker in _NOISE_MARKERS):
+            in_noise = True
+            continue
+        if in_noise and (stripped.startswith("- ") or stripped.startswith("→") or not stripped):
+            if not stripped:
+                in_noise = False
+            continue
+        in_noise = False
+        clean_lines.append(line)
+
+    core_msg = "\n".join(clean_lines).strip()
+
+    # Build formatted error
+    parts: list[str] = []
+    if file_path:
+        parts.append(f"File: {file_path}, Line {step.line_number}")
+    else:
+        parts.append(f"Line {step.line_number}")
+    parts.append(f"Step: {step.raw_text}")
+    parts.append(f"Error: {core_msg[:2000]}")
+
+    return " | ".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Step execution
 # ---------------------------------------------------------------------------
 
@@ -194,7 +249,7 @@ async def execute_step(
             step=step,
             status=StepStatus.FAILED,
             duration_ms=elapsed,
-            error=f"{type(exc).__name__}: {exc}",
+            error=_format_error(exc, step, file_path),
         )
 
 
@@ -230,12 +285,43 @@ async def _dispatch_action(
 
         case ActionType.SELECT:
             # target_identifier = dropdown, value = option to select
-            tt = TargetType.INPUT if step.target_type == TargetType.GENERIC else step.target_type
-            locator = resolve_locator(page, tt, t_str)
+            # Prioritize <select> elements to avoid matching text inputs
+            pattern_sel = re.compile(r"^\s*" + re.escape(t_str) + r"\s*$", re.IGNORECASE)
+            contains_sel = re.compile(re.escape(t_str), re.IGNORECASE)
+            select_locator = (
+                page.locator("select").filter(
+                    has=page.locator(f'option')
+                ).and_(
+                    page.get_by_label(pattern_sel)
+                    .or_(page.locator(f'select[name="{t_str}" i]'))
+                    .or_(page.locator(f'select[id="{t_str}" i]'))
+                    .or_(page.locator(f'select[aria-label*="{t_str}" i]'))
+                )
+            )
+            # Try select-first approach, fall back to generic locator
             try:
-                await locator.select_option(label=v_str)
+                if await select_locator.count() > 0:
+                    await select_locator.first.select_option(label=v_str)
+                else:
+                    # Fall back to label-based select lookup
+                    label_select = page.get_by_label(pattern_sel, exact=False).locator("select").or_(
+                        page.get_by_label(contains_sel, exact=False).locator("select")
+                    )
+                    if await label_select.count() > 0:
+                        await label_select.first.select_option(label=v_str)
+                    else:
+                        # Final fallback: resolve with generic INPUT locator
+                        tt = TargetType.INPUT if step.target_type == TargetType.GENERIC else step.target_type
+                        locator = resolve_locator(page, tt, t_str)
+                        await locator.select_option(label=v_str)
             except Exception:
-                await locator.select_option(value=v_str)
+                # Retry with value-based selection
+                tt = TargetType.INPUT if step.target_type == TargetType.GENERIC else step.target_type
+                locator = resolve_locator(page, tt, t_str)
+                try:
+                    await locator.select_option(label=v_str)
+                except Exception:
+                    await locator.select_option(value=v_str)
 
         case ActionType.HOVER:
             locator = resolve_locator(page, step.target_type, t_str)
@@ -302,6 +388,16 @@ async def _dispatch_action(
             else:
                 ms = int(value or "0") * 1000
                 await page.wait_for_timeout(ms)
+
+        case ActionType.WAIT_URL:
+            # target = comparison mode ("contains", "is", "matches")
+            # value = expected URL/pattern
+            if t_str in ("contains",):
+                await page.wait_for_url(re.compile(re.escape(v_str)))
+            elif t_str in ("matches",):
+                await page.wait_for_url(re.compile(v_str))
+            else:
+                await page.wait_for_url(v_str)
 
         case ActionType.STORE_VARIABLE:
             # target = element identifier, value = variable name
@@ -672,13 +768,16 @@ async def execute_suite(
                 await _run_hook(suite.suite_setup_code, setup_page, store, cfg)
 
         for test_case in suite.test_cases:
+            # Create per-scenario variable store when clean_session is enabled
+            scenario_store = VariableStore() if cfg.clean_session else store
+
             enable_trace = cfg.trace_dir is not None
             ctx_mgr = session.new_context(trace=enable_trace)
             async with ctx_mgr as (_ctx, page):
                 scenario_results = await execute_scenario(
                     test_case,
                     page,
-                    store,
+                    scenario_store,
                     cfg,
                     step_debug=step_debug,
                     suite_name=suite.name,

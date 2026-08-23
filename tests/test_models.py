@@ -34,7 +34,7 @@ class TestActionTypeEnum:
             "PRESS", "UPLOAD", "CHECK", "UNCHECK",
             "ASSERT_VISIBLE", "ASSERT_HIDDEN", "ASSERT_URL",
             "ASSERT_TITLE", "ASSERT_VALUE", "ASSERT_COUNT",
-            "ASSERT_VARIABLE", "WAIT", "STORE_VARIABLE", "CUSTOM",
+            "ASSERT_VARIABLE", "WAIT", "WAIT_URL", "STORE_VARIABLE", "CUSTOM",
         }
         assert set(ActionType.__members__.keys()) == expected
 
@@ -49,7 +49,7 @@ class TestTargetTypeEnum:
     def test_all_expected_members_exist(self):
         expected = {
             "BUTTON", "LINK", "INPUT", "HEADING", "TEXT",
-            "CHECKBOX", "RADIO", "GENERIC",
+            "CHECKBOX", "RADIO", "TESTID", "GENERIC",
         }
         assert set(TargetType.__members__.keys()) == expected
 

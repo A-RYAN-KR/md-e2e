@@ -29,6 +29,7 @@ start: step
      | assert_variable
      | wait_seconds
      | wait_network
+     | wait_url
      | store_var
 
 // ── Navigation ──────────────────────────────────────────────────────────────
@@ -36,35 +37,45 @@ navigate: NAV_KW QSTR
 reload:   RELOAD_KW
 
 // ── Interaction ─────────────────────────────────────────────────────────────
-click:        CLICK_KW TARGET_TYPE QSTR
+click:        CLICK_KW TESTID_KW QSTR
+            | CLICK_KW TARGET_TYPE QSTR
             | CLICK_KW QSTR
-fill:         FILL_KW TARGET_TYPE QSTR WITH_KW QSTR
+fill:         FILL_KW TESTID_KW QSTR WITH_KW QSTR
+            | FILL_KW TARGET_TYPE QSTR WITH_KW QSTR
             | FILL_KW QSTR WITH_KW QSTR
 select_option: SELECT_KW QSTR FROM_KW QSTR
-hover:        HOVER_KW TARGET_TYPE QSTR
+hover:        HOVER_KW TESTID_KW QSTR
+            | HOVER_KW TARGET_TYPE QSTR
             | HOVER_KW QSTR
 press_key:    PRESS_KW QSTR
 upload_file:  UPLOAD_KW QSTR TO_KW QSTR
-check_box:    CHECK_KW TARGET_TYPE QSTR
+check_box:    CHECK_KW TESTID_KW QSTR
+            | CHECK_KW TARGET_TYPE QSTR
             | CHECK_KW QSTR
-uncheck_box:  UNCHECK_KW TARGET_TYPE QSTR
+uncheck_box:  UNCHECK_KW TESTID_KW QSTR
+            | UNCHECK_KW TARGET_TYPE QSTR
             | UNCHECK_KW QSTR
 
 // ── Assertions ──────────────────────────────────────────────────────────────
-assert_visible: ASSERT_KW TARGET_TYPE QSTR IS_VISIBLE
+assert_visible: ASSERT_KW TESTID_KW QSTR IS_VISIBLE
+              | ASSERT_KW TARGET_TYPE QSTR IS_VISIBLE
               | ASSERT_KW QSTR IS_VISIBLE
-assert_hidden:  ASSERT_KW TARGET_TYPE QSTR IS_HIDDEN
+assert_hidden:  ASSERT_KW TESTID_KW QSTR IS_HIDDEN
+              | ASSERT_KW TARGET_TYPE QSTR IS_HIDDEN
               | ASSERT_KW QSTR IS_HIDDEN
 assert_url:     ASSERT_URL_KW CMP QSTR
 assert_title:   ASSERT_TITLE_KW CMP QSTR
-assert_value:   ASSERT_KW TARGET_TYPE QSTR VALUE_KW CMP QSTR
+assert_value:   ASSERT_KW TESTID_KW QSTR VALUE_KW CMP QSTR
+              | ASSERT_KW TARGET_TYPE QSTR VALUE_KW CMP QSTR
               | ASSERT_KW QSTR VALUE_KW CMP QSTR
 assert_variable: ASSERT_KW VARIABLE_KW QSTR CMP QSTR
 
 // ── State & Control ─────────────────────────────────────────────────────────
 wait_seconds: WAIT_KW NUMBER SECONDS_KW
 wait_network: WAIT_NETWORK_KW
-store_var:    STORE_FROM_KW TARGET_TYPE QSTR AS_KW QSTR
+wait_url:     WAIT_URL_KW CMP QSTR
+store_var:    STORE_FROM_KW TESTID_KW QSTR AS_KW QSTR
+            | STORE_FROM_KW TARGET_TYPE QSTR AS_KW QSTR
             | STORE_FROM_KW QSTR AS_KW QSTR
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -84,8 +95,12 @@ ASSERT_TITLE_KW.5:  /(?i)assert\s+title/
 IS_VISIBLE.5:       /(?i)is\s+visible/
 IS_HIDDEN.5:        /(?i)is\s+hidden/
 WAIT_NETWORK_KW.5:  /(?i)wait\s+for\s+network\s+idle/
+WAIT_URL_KW.5:      /(?i)wait\s+for\s+url/
 STORE_FROM_KW.5:    /(?i)store(?:\s+text)?\s+from/
 VARIABLE_KW.5:      /(?i)variable/
+
+// Testid keyword — higher than TARGET_TYPE so "testid" is not consumed as generic text
+TESTID_KW.4:        /(?i)testid/
 
 // Single-word keywords
 CLICK_KW.3:    /(?i)click/

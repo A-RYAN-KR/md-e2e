@@ -13,6 +13,7 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -191,8 +192,37 @@ def _matches_role_confinement(target_type: TargetType, el: dict[str, str]) -> bo
             return role == "radio" or (tag == "input" and el.get("role") == "radio")
         case TargetType.HEADING:
             return tag in ("h1", "h2", "h3", "h4", "h5", "h6") or role == "heading"
+        case TargetType.TESTID:
+            # data-testid elements can be any tag
+            return bool(el.get("testId", ""))
         case TargetType.TEXT | TargetType.GENERIC | _:
             return True
+
+
+# Regex to match trailing metadata like (2), [New], *, etc.
+_TRAILING_META_PATTERN = re.compile(
+    r'\s*(?:'
+    r'\([^)]*\)'      # (2), (New)
+    r'|\[[^\]]*\]'    # [New], [2]
+    r'|\*+$'          # trailing asterisks
+    r')\s*$'
+)
+
+
+def _strip_trailing_metadata(text: str) -> str:
+    """Strip trailing metadata patterns from candidate text for better fuzzy matching.
+
+    Removes patterns like " (2)", " [New]", "*" from the end of strings
+    so that "Customer Reviews (2)" can match "Customer Reviews".
+    """
+    result = text
+    # Iteratively strip trailing metadata patterns
+    for _ in range(3):  # Handle multiple trailing patterns
+        stripped = _TRAILING_META_PATTERN.sub('', result).strip()
+        if stripped == result:
+            break
+        result = stripped
+    return result or text  # Don't return empty string
 
 
 def fuzzy_heal(
@@ -209,6 +239,7 @@ def fuzzy_heal(
     2. Role & Type confinement matching
     3. Opposing verb guard (Delete <-> Save, etc.)
     4. Ambiguity delta check (top score - second score >= 0.12)
+    5. Trailing metadata stripping for better matching (e.g. "(2)", "[New]")
     """
     if not original_id or not elements:
         return None
@@ -241,10 +272,17 @@ def fuzzy_heal(
             if _are_opposing_verbs(original_id, text):
                 continue
 
-            ratio = difflib.SequenceMatcher(None, original_id.lower(), text.lower()).ratio()
-            if ratio > best_el_score:
-                best_el_score = ratio
-                best_el_text = text
+            # Try matching against both raw text and metadata-stripped text
+            texts_to_match = [text]
+            stripped_text = _strip_trailing_metadata(text)
+            if stripped_text != text:
+                texts_to_match.append(stripped_text)
+
+            for match_text in texts_to_match:
+                ratio = difflib.SequenceMatcher(None, original_id.lower(), match_text.lower()).ratio()
+                if ratio > best_el_score:
+                    best_el_score = ratio
+                    best_el_text = text  # Always use the original text for interaction
 
         if best_el_score >= min_threshold:
             scored_candidates.append((best_el_score, best_el_text))

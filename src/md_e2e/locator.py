@@ -84,10 +84,13 @@ def resolve_locator(
     # Compile regex pattern to match exact whole-string case-insensitively,
     # preventing strict mode violations (e.g. "Male" matching "Female").
     pattern = re.compile(r"^\s*" + re.escape(identifier) + r"\s*$", re.IGNORECASE)
-    css_escaped = identifier.replace("\\", "\\\\").replace('"', '\\"')
+    css_escaped = identifier.replace("\\", "\\\\").replace('"', '\\"').replace("/", "\\/")
 
     # 2. Explicit target type
     match target_type:
+        case TargetType.TESTID:
+            return page.get_by_test_id(identifier)
+
         case TargetType.BUTTON:
             return page.get_by_role("button", name=pattern).or_(
                 page.locator(

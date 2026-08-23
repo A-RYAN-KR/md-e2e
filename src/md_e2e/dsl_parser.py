@@ -89,6 +89,7 @@ def _resolve_target_type(token: Token | str) -> TargetType:
         "text": TargetType.TEXT,
         "checkbox": TargetType.CHECKBOX,
         "radio": TargetType.RADIO,
+        "testid": TargetType.TESTID,
     }
     return mapping.get(str(token).strip().lower(), TargetType.GENERIC)
 
@@ -98,7 +99,7 @@ def _resolve_target_type(token: Token | str) -> TargetType:
 # ---------------------------------------------------------------------------
 
 # Token types that carry semantic meaning (everything else is a keyword)
-_MEANINGFUL_TYPES = frozenset({"QSTR", "TARGET_TYPE", "CMP", "NUMBER"})
+_MEANINGFUL_TYPES = frozenset({"QSTR", "TARGET_TYPE", "TESTID_KW", "CMP", "NUMBER"})
 
 
 def _filter_items(items) -> list[Token]:
@@ -131,7 +132,7 @@ class _StepTransformer(Transformer):
 
     def click(self, items):
         meaningful = _filter_items(items)
-        if len(meaningful) == 2:  # TARGET_TYPE + QSTR
+        if len(meaningful) == 2:  # TARGET_TYPE/TESTID_KW + QSTR
             return {
                 "action_type": ActionType.CLICK,
                 "target_type": _resolve_target_type(meaningful[0]),
@@ -144,7 +145,7 @@ class _StepTransformer(Transformer):
 
     def fill(self, items):
         meaningful = _filter_items(items)
-        if len(meaningful) == 3:  # TARGET_TYPE + QSTR + QSTR
+        if len(meaningful) == 3:  # TARGET_TYPE/TESTID_KW + QSTR + QSTR
             return {
                 "action_type": ActionType.FILL,
                 "target_type": _resolve_target_type(meaningful[0]),
@@ -318,6 +319,16 @@ class _StepTransformer(Transformer):
         return {
             "action_type": ActionType.WAIT,
             "value": "network_idle",
+        }
+
+    def wait_url(self, items):
+        meaningful = _filter_items(items)
+        # meaningful: CMP + QSTR
+        cmp_mode = str(meaningful[0]).strip().lower()
+        return {
+            "action_type": ActionType.WAIT_URL,
+            "target_identifier": cmp_mode,
+            "value": _strip_quotes(meaningful[1]),
         }
 
     def store_var(self, items):

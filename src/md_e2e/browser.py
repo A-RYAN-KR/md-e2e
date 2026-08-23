@@ -74,6 +74,7 @@ class BrowserConfig:
     enable_healing: bool = True
     healing_cache_path: Path | str | None = ".md_e2e_cache.json"
     llm_api_key: str | None = None
+    clean_session: bool = False
 
     def __post_init__(self) -> None:
         if self.llm_api_key is None:
