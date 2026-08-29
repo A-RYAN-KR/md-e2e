@@ -83,6 +83,7 @@ def _parse_table_tokens(tokens: list, start_idx: int) -> tuple[list[dict[str, st
     in_head = False
     in_body = False
     current_row: list[str] = []
+    current_cell_text = ""
 
     while i < len(tokens):
         tok = tokens[i]
@@ -97,17 +98,21 @@ def _parse_table_tokens(tokens: list, start_idx: int) -> tuple[list[dict[str, st
             in_body = False
         elif tok.type == "tr_open":
             current_row = []
+        elif tok.type in ("th_open", "td_open"):
+            current_cell_text = ""
+        elif tok.type == "inline":
+            current_cell_text = _inline_text(tok)
+        elif tok.type in ("th_close", "td_close"):
+            current_row.append(current_cell_text.strip())
         elif tok.type == "tr_close":
             if in_head:
-                headers = [h.strip() for h in current_row]
+                headers = list(current_row)
             elif in_body and headers:
                 row_dict = {
-                    h.strip(): (current_row[col_idx].strip() if col_idx < len(current_row) else "")
-                    for col_idx, h in enumerate(headers)
+                    h: (current_row[idx] if idx < len(current_row) else "")
+                    for idx, h in enumerate(headers)
                 }
                 rows.append(row_dict)
-        elif tok.type == "inline" and (in_head or in_body):
-            current_row.append(_inline_text(tok))
         elif tok.type == "table_close":
             return rows, i + 1
 
@@ -306,6 +311,7 @@ def parse_markdown(
                         step, error = parse_step(raw, line_number=line)
                         step.is_checklist_item = is_checklist
                         step.is_checked = is_checked
+                        step.file_path = fpath
                         current_case.steps.append(step)
 
                         if error is not None:

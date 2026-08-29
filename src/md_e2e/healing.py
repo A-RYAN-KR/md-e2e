@@ -11,7 +11,9 @@ Implements a hybrid self-healing strategy:
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
+import logging
 import os
 import re
 from collections.abc import Callable
@@ -25,6 +27,8 @@ if TYPE_CHECKING:
 
 from .models import ActionType, HealingEvent, TargetType, TestStep
 from .variables import VariableStore
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Opposing Verb Guard Definitions
@@ -84,15 +88,16 @@ class HealingCache:
             try:
                 content = self.cache_path.read_text(encoding="utf-8")
                 self._data = json.loads(content)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to load healing cache from {self.cache_path}: {e}")
                 self._data = {}
 
     def save(self) -> None:
         """Persist cache entries to JSON file."""
         try:
             self.cache_path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to save healing cache to {self.cache_path}: {e}")
 
     def make_key(
         self,
@@ -101,10 +106,12 @@ class HealingCache:
         line_number: int,
         target_identifier: str,
         file_path: Path | str | None = None,
+        param_signature: str = "",
     ) -> str:
         """Generate a raw-template cache key immune to dynamic variable collisions."""
         file_prefix = f"{Path(file_path).as_posix()}::" if file_path else ""
-        return f"{file_prefix}{suite_name}::{case_name}::{line_number}::{target_identifier}"
+        base = f"{file_prefix}{suite_name}::{case_name}::{line_number}::{target_identifier}"
+        return f"{base}::{param_signature}" if param_signature else base
 
     def get(self, key: str) -> str | None:
         return self._data.get(key)
@@ -166,7 +173,8 @@ async def clean_dom_snapshot(page: Page) -> list[dict[str, str]]:
     try:
         elements = await page.evaluate(_DOM_SNAPSHOT_JS)
         return elements if isinstance(elements, list) else []
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to snapshot DOM for healing: {e}")
         return []
 
 
@@ -350,11 +358,14 @@ async def llm_heal(
             f"Return ONLY the exact text or label of the matching element to interact with, with no other words or markdown formatting."
         )
 
+        base_url = os.environ.get("MD_LLM_BASE_URL", "https://api.openai.com/v1")
+        model = os.environ.get("MD_LLM_MODEL", "gpt-4o-mini")
+
         try:
             req = urllib.request.Request(
-                "https://api.openai.com/v1/chat/completions",
+                f"{base_url.rstrip('/')}/chat/completions",
                 data=json.dumps({
-                    "model": "gpt-4o-mini",
+                    "model": model,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.0,
                     "max_tokens": 50,
@@ -365,11 +376,19 @@ async def llm_heal(
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                choice = data["choices"][0]["message"]["content"].strip().strip('"\'`')
-                return choice if choice else None
-        except Exception:
+            import asyncio
+            
+            def fetch_llm():
+                llm_timeout = int(os.environ.get("MD_LLM_TIMEOUT", "10"))
+                with urllib.request.urlopen(req, timeout=llm_timeout) as resp:
+                    return resp.read().decode("utf-8")
+            
+            raw_response = await asyncio.to_thread(fetch_llm)
+            data = json.loads(raw_response)
+            choice = data["choices"][0]["message"]["content"].strip().strip('"\'`')
+            return choice if choice else None
+        except Exception as e:
+            logger.warning(f"LLM healing API request failed: {e}")
             return None
 
     return None
@@ -390,7 +409,8 @@ _HEALABLE_ACTIONS = {
     ActionType.UNCHECK,
     ActionType.ASSERT_VISIBLE,
     ActionType.ASSERT_VALUE,
-    ActionType.ASSERT_TITLE,
+    # NOTE: ASSERT_TITLE intentionally excluded — page titles are not in the
+    # interactive DOM snapshot, so healing would match random element text.
 }
 
 
@@ -404,6 +424,16 @@ def is_healable_step(step: TestStep) -> bool:
     return step.action_type != ActionType.ASSERT_HIDDEN
 
 
+def _replace_target_identifier(text: str, old_id: str, new_id: str) -> str:
+    """Safely replace original target identifier within quoted bounds."""
+    if old_id not in text:
+        return text
+    # Only replace if bounded by matching quotes (single, double, or backticks)
+    pattern = re.compile(rf'(["\'`]){re.escape(old_id)}\1')
+    # Use a lambda to avoid regex replacement interpretation of new_id
+    return pattern.sub(lambda m: f'{m.group(1)}{new_id}{m.group(1)}', text)
+
+
 async def heal_step(
     page: Page,
     step: TestStep,
@@ -414,31 +444,24 @@ async def heal_step(
     config: BrowserConfig,
     cache: HealingCache,
 ) -> tuple[str | None, HealingEvent | None]:
-    """Master Self-Healing Coordinator.
-
-    Pipeline:
-    1. Check if step is healable (bypasses ASSERT_HIDDEN).
-    2. Check Healing Cache. If cache hit, return healed identifier.
-    3. Level 1: Clean DOM snapshot + Fuzzy Heuristic resolution.
-    4. Level 2: Optional LLM Fallback (guarded against opposing actions).
-    5. Save to cache & return (healed_identifier, HealingEvent).
-    """
+    """Master Self-Healing Coordinator."""
     if not is_healable_step(step) or not step.target_identifier:
         return None, None
 
     orig_id = store.resolve(step.target_identifier, line_number=step.line_number)
-    cache_key = cache.make_key(suite_name, case_name, step.line_number, step.target_identifier, file_path=file_path)
+    # Generate a deterministic signature for parameters in case of matrix run
+    param_signature = ""
+    if getattr(store, "_data", None):
+        # Use hashlib.md5 instead of hash() for deterministic cross-session cache keys
+        sig_str = str(sorted(store._data.items()))
+        param_signature = hashlib.md5(sig_str.encode("utf-8")).hexdigest()
+    cache_key = cache.make_key(suite_name, case_name, step.line_number, step.target_identifier, file_path=file_path, param_signature=str(param_signature))
 
     # 1. Cache lookup
     cached_val = cache.get(cache_key)
     if cached_val:
         if not _are_opposing_verbs(orig_id, cached_val):
-            if orig_id in step.raw_text:
-                healed_raw = step.raw_text.replace(orig_id, cached_val)
-            elif step.target_identifier and step.target_identifier in step.raw_text:
-                healed_raw = step.raw_text.replace(step.target_identifier, cached_val)
-            else:
-                healed_raw = step.raw_text
+            healed_raw = _replace_target_identifier(step.raw_text, step.target_identifier, cached_val)
 
             event = HealingEvent(
                 file_path=file_path,
@@ -469,12 +492,7 @@ async def heal_step(
 
     if healed_id and healed_id != orig_id:
         cache.set(cache_key, healed_id)
-        if orig_id in step.raw_text:
-            healed_raw = step.raw_text.replace(orig_id, healed_id)
-        elif step.target_identifier and step.target_identifier in step.raw_text:
-            healed_raw = step.raw_text.replace(step.target_identifier, healed_id)
-        else:
-            healed_raw = step.raw_text
+        healed_raw = _replace_target_identifier(step.raw_text, step.target_identifier, healed_id)
 
         event = HealingEvent(
             file_path=file_path,
@@ -517,8 +535,12 @@ def generate_healing_diff(events: list[HealingEvent]) -> str:
             a_path = rel_path
             b_path = rel_path
 
+        # Required 'diff --git' header for strict git apply compatibility
+        diff_lines.append(f"diff --git {a_path} {b_path}")
         diff_lines.append(f"--- {a_path}")
         diff_lines.append(f"+++ {b_path}")
+
+        ev_list.sort(key=lambda e: e.line_number)
 
         for ev in ev_list:
             line_no = ev.line_number

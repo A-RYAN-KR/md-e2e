@@ -37,7 +37,7 @@ class ActionType(StrEnum):
     ASSERT_URL = "ASSERT_URL"
     ASSERT_TITLE = "ASSERT_TITLE"
     ASSERT_VALUE = "ASSERT_VALUE"
-    ASSERT_COUNT = "ASSERT_COUNT"
+    ASSERT_COUNT = "ASSERT_COUNT"  # Reserved for element count assertions (e.g. Assert count of "items" is 5)
     ASSERT_VARIABLE = "ASSERT_VARIABLE"
 
     # State & Control
@@ -88,9 +88,11 @@ class TestStep:
     target_type: TargetType = TargetType.GENERIC
     target_identifier: str | None = None
     value: str | None = None
+    comparison_mode: str = "is"
     is_checklist_item: bool = False
     is_checked: bool = False
     variables: list[str] = field(default_factory=list)
+    file_path: Path | None = None
 
 
 @dataclass

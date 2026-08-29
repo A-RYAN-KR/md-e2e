@@ -11,9 +11,15 @@ Orchestrates the full execution lifecycle:
 
 from __future__ import annotations
 
+import logging
+import os
 import re
+import tempfile
+import textwrap
 import time
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -103,15 +109,25 @@ class SuiteResult:
 
 
 # ---------------------------------------------------------------------------
+# CSS value escaping for attribute selectors
+# ---------------------------------------------------------------------------
+
+def _css_escape_value(s: str) -> str:
+    """Escape a string for safe interpolation inside CSS attribute selectors like [attr="value"]."""
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("]", "\\]").replace("'", "\\'")
+
+
+# ---------------------------------------------------------------------------
 # Error formatting
 # ---------------------------------------------------------------------------
 
 _NOISE_MARKERS = frozenset({
     "Call log:",
-    "waiting for",
-    "============",
+    "waiting for locator(",
+    "============ logs ============",
     "Locator resolved to",
-    "attempting",
+    "attempting click action",
+    "attempting fill action",
 })
 
 
@@ -192,7 +208,7 @@ async def execute_step(
             else None
         )
 
-        await _dispatch_action(step, page, store, target, value)
+        await _dispatch_action(step, page, store, target, value, config)
 
         elapsed = (time.perf_counter() - t0) * 1000
         return StepResult(step=step, status=StepStatus.PASSED, duration_ms=elapsed)
@@ -214,7 +230,7 @@ async def execute_step(
 
             if healed_id and event:
                 try:
-                    await _dispatch_action(step, page, store, healed_id, value)
+                    await _dispatch_action(step, page, store, healed_id, value, config)
                     elapsed = (time.perf_counter() - t0) * 1000
                     return StepResult(
                         step=step,
@@ -232,7 +248,7 @@ async def execute_step(
                         )
                         if healed_id_2 and event_2:
                             try:
-                                await _dispatch_action(step, page, store, healed_id_2, value)
+                                await _dispatch_action(step, page, store, healed_id_2, value, config)
                                 elapsed = (time.perf_counter() - t0) * 1000
                                 return StepResult(
                                     step=step,
@@ -260,6 +276,7 @@ async def _dispatch_action(
     store: VariableStore,
     target: str | None,
     value: str | None,
+    config: BrowserConfig | None = None,
 ) -> None:
     """Dispatch a step to the appropriate Playwright action."""
     t_str = target or ""
@@ -286,6 +303,7 @@ async def _dispatch_action(
         case ActionType.SELECT:
             # target_identifier = dropdown, value = option to select
             # Prioritize <select> elements to avoid matching text inputs
+            css_t_str = _css_escape_value(t_str)
             pattern_sel = re.compile(r"^\s*" + re.escape(t_str) + r"\s*$", re.IGNORECASE)
             contains_sel = re.compile(re.escape(t_str), re.IGNORECASE)
             select_locator = (
@@ -293,9 +311,9 @@ async def _dispatch_action(
                     has=page.locator(f'option')
                 ).and_(
                     page.get_by_label(pattern_sel)
-                    .or_(page.locator(f'select[name="{t_str}" i]'))
-                    .or_(page.locator(f'select[id="{t_str}" i]'))
-                    .or_(page.locator(f'select[aria-label*="{t_str}" i]'))
+                    .or_(page.locator(f'select[name="{css_t_str}" i]'))
+                    .or_(page.locator(f'select[id="{css_t_str}" i]'))
+                    .or_(page.locator(f'select[aria-label*="{css_t_str}" i]'))
                 )
             )
             # Try select-first approach, fall back to generic locator
@@ -349,14 +367,17 @@ async def _dispatch_action(
         # ── Assertions ───────────────────────────────────────────────
         case ActionType.ASSERT_VISIBLE:
             locator = resolve_locator(page, step.target_type, t_str)
+            # Split configured timeout into 80% primary, 20% fallback to prevent 2x timeout delay
+            timeout_ms = config.timeout if config else 30_000
             try:
-                await expect(locator).to_be_visible()
+                await expect(locator).to_be_visible(timeout=timeout_ms * 0.8)
             except Exception as e:
-                # If first resolved element was hidden in DOM, check if any matching element is visible
-                pattern = re.compile(re.escape(t_str), re.IGNORECASE)
-                visible_fallback = page.locator("*:visible").filter(has_text=pattern).first
+                pattern = re.compile(r"^\s*" + re.escape(t_str) + r"\s*$", re.IGNORECASE)
+                # Target specific text containers rather than wildcard '*'
+                visible_fallback = page.locator("button, a, p, span, h1, h2, h3, h4, h5, h6, label, td, li") \
+                    .filter(has_text=pattern).first
                 try:
-                    await expect(visible_fallback).to_be_visible()
+                    await expect(visible_fallback).to_be_visible(timeout=timeout_ms * 0.2)
                 except Exception:
                     raise e
 
@@ -397,7 +418,8 @@ async def _dispatch_action(
             elif t_str in ("matches",):
                 await page.wait_for_url(re.compile(v_str))
             else:
-                await page.wait_for_url(v_str)
+                # Use exact regex match instead of glob matching
+                await page.wait_for_url(re.compile(r"^" + re.escape(v_str) + r"$"))
 
         case ActionType.STORE_VARIABLE:
             # target = element identifier, value = variable name
@@ -411,6 +433,12 @@ async def _dispatch_action(
 
         case ActionType.CUSTOM:
             await _execute_custom_step(step, page, store)
+
+        case ActionType.ASSERT_COUNT:
+            raise NotImplementedError(
+                f"ASSERT_COUNT is reserved but not yet implemented. "
+                f"Step: {step.raw_text} at line {step.line_number}"
+            )
 
         case _:
             raise StepNotImplementedError(step)
@@ -526,21 +554,37 @@ async def _run_hook(
     The code runs with a scoped namespace containing ``page``, ``context``,
     ``store``, ``config``, ``browser``, and ``context_store``.
     """
-    import textwrap
     indented = textwrap.indent(code, "    ")
     wrapper = (
         "async def __hook__(page, store, browser, context, context_store, config):\n"
         f"{indented}\n"
     )
     
+    # Restrict execution globals — block dangerous builtins for security
+    import builtins as _builtins_module
+    _BLOCKED_BUILTINS = {
+        'exec', 'eval', 'compile', '__import__', 'open',
+        'globals', 'locals', 'breakpoint', 'exit', 'quit',
+    }
+    safe_builtins = {
+        k: v for k, v in vars(_builtins_module).items()
+        if k not in _BLOCKED_BUILTINS
+    }
+    safe_globals: dict[str, Any] = {
+        "__builtins__": safe_builtins,
+        "asyncio": __import__("asyncio"),
+        "re": __import__("re"),
+        "json": __import__("json"),
+    }
     local_scope: dict[str, Any] = {}
-    exec(wrapper, globals(), local_scope)
+    exec(wrapper, safe_globals, local_scope)
     
     hook_fn = local_scope["__hook__"]
+    browser_instance = getattr(page.context, "browser", None)
     await hook_fn(
         page,
         store,
-        page.context.browser,
+        browser_instance,
         page.context,
         store,
         config
@@ -582,8 +626,11 @@ async def execute_scenario(
 
         # Collect console logs
         console_logs: list[str] = []
-        def log_handler(msg):
-            console_logs.append(f"[{msg.type}] {msg.text}")
+        def _make_log_handler(log_list):
+            def handler(msg):
+                log_list.append(f"[{msg.type}] {msg.text}")
+            return handler
+        log_handler = _make_log_handler(console_logs)
         page.on("console", log_handler)
 
         t0 = time.perf_counter()
@@ -707,18 +754,11 @@ async def execute_scenario(
             if test_case.teardown_code:
                 try:
                     await _run_hook(test_case.teardown_code, page, run_store, config)
-                except Exception:
-                    pass  # Don't mask scenario errors
+                except Exception as e:
+                    logger.error(f"Error in teardown hook for '{run_name}': {e}")
 
-        # Resolve video path if recorded
+        # Video path will be resolved after context closes
         video_path = None
-        if page.video:
-            try:
-                v_path = await page.video.path()
-                if v_path:
-                    video_path = Path(v_path)
-            except Exception:
-                pass
 
         elapsed = (time.perf_counter() - t0) * 1000
         results.append(ScenarioResult(
@@ -761,50 +801,69 @@ async def execute_suite(
     t0 = time.perf_counter()
 
     async with BrowserSession(cfg) as session:
-        # Run suite-level setup hook (before any scenario)
+        temp_state_file = None
+        # Run suite-level setup hook and preserve session state if cookies/storage changed
         # Note: No page yet, so setup code runs with a temporary page
         if suite.suite_setup_code:
-            async with session.new_context() as (_ctx, setup_page):
+            async with session.new_context() as (setup_ctx, setup_page):
                 await _run_hook(suite.suite_setup_code, setup_page, store, cfg)
+                with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
+                    temp_state_file = tf.name
+                await setup_ctx.storage_state(path=temp_state_file)
+                cfg.storage_state = temp_state_file
 
-        for test_case in suite.test_cases:
-            # Create per-scenario variable store when clean_session is enabled
-            scenario_store = VariableStore() if cfg.clean_session else store
+        try:
+            for test_case in suite.test_cases:
+                # Create per-scenario variable store when clean_session is enabled
+                scenario_store = VariableStore() if cfg.clean_session else store
 
-            enable_trace = cfg.trace_dir is not None
-            ctx_mgr = session.new_context(trace=enable_trace)
-            async with ctx_mgr as (_ctx, page):
-                scenario_results = await execute_scenario(
-                    test_case,
-                    page,
-                    scenario_store,
-                    cfg,
-                    step_debug=step_debug,
-                    suite_name=suite.name,
-                    file_path=suite.file_path,
-                    cache=cache,
-                )
-
-                # Save trace on failure & accumulate healing events
-                for sr in scenario_results:
-                    if sr.healing_events:
-                        suite_result.healing_events.extend(sr.healing_events)
-                    if sr.status == StepStatus.FAILED and enable_trace:
-                        safe = re.sub(r'[^\w\-.]', '_', sr.name)
-                        trace_path = await ctx_mgr.save_trace(safe)
-                        sr.trace_path = trace_path
-
-                suite_result.scenario_results.extend(scenario_results)
-
-        # Run suite-level teardown hook
-        if suite.suite_teardown_code:
-            async with session.new_context() as (_ctx, teardown_page):
-                try:
-                    await _run_hook(
-                        suite.suite_teardown_code, teardown_page, store, cfg,
+                enable_trace = cfg.trace_dir is not None
+                ctx_mgr = session.new_context(trace=enable_trace)
+                async with ctx_mgr as (_ctx, page):
+                    scenario_results = await execute_scenario(
+                        test_case,
+                        page,
+                        scenario_store,
+                        cfg,
+                        step_debug=step_debug,
+                        suite_name=suite.name,
+                        file_path=suite.file_path,
+                        cache=cache,
                     )
-                except Exception:
-                    pass
+
+                    video_ref = page.video
+
+                    # Save trace on failure & accumulate healing events, get video
+                    for sr in scenario_results:
+                        if video_ref:
+                            try:
+                                v_path = await video_ref.path()
+                                if v_path:
+                                    sr.video_path = Path(v_path)
+                            except Exception as e:
+                                logger.warning(f"Failed to retrieve video path: {e}")
+
+                        if sr.healing_events:
+                            suite_result.healing_events.extend(sr.healing_events)
+                        if sr.status == StepStatus.FAILED and enable_trace:
+                            safe = re.sub(r'[^\w\-.]', '_', sr.name)
+                            trace_path = await ctx_mgr.save_trace(safe)
+                            sr.trace_path = trace_path
+
+                    suite_result.scenario_results.extend(scenario_results)
+
+            # Run suite-level teardown hook
+            if suite.suite_teardown_code:
+                async with session.new_context() as (_ctx, teardown_page):
+                    try:
+                        await _run_hook(
+                            suite.suite_teardown_code, teardown_page, store, cfg,
+                        )
+                    except Exception as e:
+                        logger.error(f"Error in suite-level teardown hook: {e}")
+        finally:
+            if temp_state_file and os.path.exists(temp_state_file):
+                os.remove(temp_state_file)
 
     suite_result.duration_ms = (time.perf_counter() - t0) * 1000
     return suite_result

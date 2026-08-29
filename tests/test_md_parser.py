@@ -304,11 +304,11 @@ class TestFilePath:
         suite, _ = parse_markdown("# S\n", file_path="/tests/login.md")
         assert suite.file_path == Path("/tests/login.md")
 
-    def test_errors_include_file_path(self):
+    def test_step_includes_file_path(self):
         md = "# S\n\n## T\n\n- Do something custom\n"
-        _, errors = parse_markdown(md, file_path="test.md")
-        assert len(errors) >= 1
-        assert errors[0].file_path == Path("test.md")
+        suite, errors = parse_markdown(md, file_path="test.md")
+        assert len(errors) == 0
+        assert suite.test_cases[0].steps[0].file_path == Path("test.md")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -317,11 +317,10 @@ class TestFilePath:
 
 
 class TestErrorReporting:
-    def test_custom_step_produces_warning(self):
+    def test_custom_step_produces_no_warning(self):
         md = '# S\n\n## T\n\n- Some unrecognised action\n'
         suite, errors = parse_markdown(md)
-        assert len(errors) == 1
-        assert "CUSTOM" in errors[0].message
+        assert len(errors) == 0
         # The step is still added to the scenario (as CUSTOM)
         assert suite.test_cases[0].steps[0].action_type == ActionType.CUSTOM
 

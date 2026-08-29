@@ -12,6 +12,7 @@ normalised, and recorded in ``TestStep.variables``.
 from __future__ import annotations
 
 import re
+import threading
 from pathlib import Path
 
 from lark import Lark, Token, Transformer, UnexpectedInput
@@ -25,17 +26,21 @@ from .models import ActionType, ParseError, TargetType, TestStep
 _GRAMMAR_PATH = Path(__file__).parent / "grammar.lark"
 
 _parser: Lark | None = None
+_parser_lock = threading.Lock()
 
 
 def _get_parser() -> Lark:
-    """Lazily instantiate and cache the Lark parser."""
+    """Lazily instantiate and cache the Lark parser (thread-safe)."""
     global _parser
     if _parser is None:
-        _parser = Lark(
-            _GRAMMAR_PATH.read_text(encoding="utf-8"),
-            parser="earley",
-            ambiguity="resolve",
-        )
+        with _parser_lock:
+            # Double-checked locking
+            if _parser is None:
+                _parser = Lark(
+                    _GRAMMAR_PATH.read_text(encoding="utf-8"),
+                    parser="earley",
+                    ambiguity="resolve",
+                )
     return _parser
 
 
@@ -45,16 +50,16 @@ def _get_parser() -> Lark:
 
 # Matches  {{ name }}  or  {{name}}  or  ${ name }  or  ${name}  or  <name>
 _VAR_PATTERN = re.compile(
-    r"\{\{\s*(?P<jinja>\w+)\s*\}\}"  # Jinja-style
+    r"\{\{\s*(?P<jinja>[\w\.\-]+)\s*\}\}"  # Jinja-style
     r"|"
-    r"\$\{\s*(?P<shell>\w+)\s*\}"   # Shell-style
+    r"\$\{\s*(?P<shell>[\w\.\-]+)\s*\}"   # Shell-style
     r"|"
-    r"<(?P<angle>\w+)>",            # Scenario outline table style
+    r"<(?P<angle>[\w\.\-]+)>",            # Scenario outline table style
 )
 
 
 def _extract_variables(text: str) -> list[str]:
-    """Return a de-duplicated, ordered list of variable names found in *text*."""
+    """Find all variable references in *text*, returning unique names in order."""
     seen: set[str] = set()
     result: list[str] = []
     for m in _VAR_PATTERN.finditer(text):
@@ -75,7 +80,8 @@ def _strip_quotes(token: Token | str) -> str:
     if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'`":
         quote = s[0]
         inner = s[1:-1]
-        return re.sub(r'\\([\\"' + re.escape(quote) + r'])', r'\1', inner)
+        # Only unescape backslash-escaped instances of the matching quote char and backslash itself
+        return inner.replace(f'\\{quote}', quote).replace('\\\\', '\\')
     return s
 
 
@@ -158,6 +164,23 @@ class _StepTransformer(Transformer):
             "value": _strip_quotes(meaningful[1]),
         }
 
+    def fill_reversed(self, items):
+        meaningful = _filter_items(items)
+        # QSTR + TARGET_TYPE/TESTID_KW + QSTR (from "fill <value> into <target>")
+        if len(meaningful) == 3:
+            return {
+                "action_type": ActionType.FILL,
+                "target_type": _resolve_target_type(meaningful[1]),
+                "target_identifier": _strip_quotes(meaningful[2]),
+                "value": _strip_quotes(meaningful[0]),
+            }
+        # QSTR + QSTR
+        return {
+            "action_type": ActionType.FILL,
+            "target_identifier": _strip_quotes(meaningful[1]),
+            "value": _strip_quotes(meaningful[0]),
+        }
+
     def select_option(self, items):
         meaningful = _filter_items(items)
         # Grammar: SELECT_KW QSTR(option) FROM_KW QSTR(dropdown)
@@ -231,10 +254,12 @@ class _StepTransformer(Transformer):
                 "action_type": ActionType.ASSERT_VISIBLE,
                 "target_type": _resolve_target_type(meaningful[0]),
                 "target_identifier": _strip_quotes(meaningful[1]),
+                "comparison_mode": "is",
             }
         return {
             "action_type": ActionType.ASSERT_VISIBLE,
             "target_identifier": _strip_quotes(meaningful[0]),
+            "comparison_mode": "is",
         }
 
     def assert_hidden(self, items):
@@ -244,10 +269,12 @@ class _StepTransformer(Transformer):
                 "action_type": ActionType.ASSERT_HIDDEN,
                 "target_type": _resolve_target_type(meaningful[0]),
                 "target_identifier": _strip_quotes(meaningful[1]),
+                "comparison_mode": "is",
             }
         return {
             "action_type": ActionType.ASSERT_HIDDEN,
             "target_identifier": _strip_quotes(meaningful[0]),
+            "comparison_mode": "is",
         }
 
     def assert_url(self, items):
@@ -272,24 +299,21 @@ class _StepTransformer(Transformer):
     def assert_value(self, items):
         meaningful = _filter_items(items)
         if len(meaningful) == 4:
-            # TARGET_TYPE + QSTR(field) + CMP + QSTR(expected)
-            target_type = _resolve_target_type(meaningful[0])
-            field_name = _strip_quotes(meaningful[1])
             cmp_mode = str(meaningful[2]).strip().lower()
             expected = _strip_quotes(meaningful[3])
             return {
                 "action_type": ActionType.ASSERT_VALUE,
-                "target_type": target_type,
-                "target_identifier": field_name,
+                "target_type": _resolve_target_type(meaningful[0]),
+                "target_identifier": _strip_quotes(meaningful[1]),
+                "comparison_mode": cmp_mode,
                 "value": f"{cmp_mode}:{expected}",
             }
-        # meaningful: QSTR(field) + CMP + QSTR(expected)
-        field_name = _strip_quotes(meaningful[0])
         cmp_mode = str(meaningful[1]).strip().lower()
         expected = _strip_quotes(meaningful[2])
         return {
             "action_type": ActionType.ASSERT_VALUE,
-            "target_identifier": field_name,
+            "target_identifier": _strip_quotes(meaningful[0]),
+            "comparison_mode": cmp_mode,
             "value": f"{cmp_mode}:{expected}",
         }
 
@@ -398,17 +422,11 @@ def parse_step(
         return step, None
 
     except UnexpectedInput:
-        # Grammar did not match → tag as CUSTOM for future resolution
+        # Grammar did not match — tag as CUSTOM for runtime @custom_step handler resolution.
         step = TestStep(
             raw_text=raw_text,
             line_number=line_number,
             action_type=ActionType.CUSTOM,
             variables=variables,
         )
-        error = ParseError(
-            file_path=None,
-            line_number=line_number,
-            message=f"Step does not match built-in DSL grammar (tagged CUSTOM): {text}",
-            raw_text=raw_text,
-        )
-        return step, error
+        return step, None

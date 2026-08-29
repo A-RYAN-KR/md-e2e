@@ -27,6 +27,7 @@ def generate_markdown_report(suite_results: list[SuiteResult]) -> str:
     """Generate Markdown report content suitable for PR comments or documentation."""
     total_passed = 0
     total_failed = 0
+    total_skipped = 0
     total_healed = 0
     total_duration = 0.0
     all_healing_events = []
@@ -41,11 +42,11 @@ def generate_markdown_report(suite_results: list[SuiteResult]) -> str:
                 if any(st.healed for st in sc.step_results):
                     total_healed += 1
             elif sc.status == StepStatus.SKIPPED:
-                total_passed += 1
+                total_skipped += 1
             else:
                 total_failed += 1
 
-    total_tests = total_passed + total_failed
+    total_tests = total_passed + total_failed + total_skipped
     has_failures = total_failed > 0
 
     status_badge = (
@@ -64,7 +65,7 @@ def generate_markdown_report(suite_results: list[SuiteResult]) -> str:
     ]
 
     for sr in suite_results:
-        passed = sum(1 for sc in sr.scenario_results if sc.status in (StepStatus.PASSED, StepStatus.SKIPPED))
+        passed = sum(1 for sc in sr.scenario_results if sc.status == StepStatus.PASSED)
         failed = sum(1 for sc in sr.scenario_results if sc.status == StepStatus.FAILED)
         healed = sum(1 for sc in sr.scenario_results if any(st.healed for st in sc.step_results))
         dur = sum(sc.duration_ms for sc in sr.scenario_results)

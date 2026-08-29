@@ -36,6 +36,8 @@ def format_action_to_dsl(action_data: dict[str, Any]) -> str:
         return f'- Check checkbox "{target}"'
     elif action == "UNCHECK":
         return f'- Uncheck checkbox "{target}"'
+    elif action == "PRESS":
+        return f'- Press "{target}"'
     
     return ""
 
@@ -130,7 +132,7 @@ async def record_session(url: str, output_path: Path) -> None:
 
         document.addEventListener("click", function(e) {
             const el = e.target;
-            const interactive = el.closest("button, a, input[type='submit'], input[type='button'], [role='button'], [role='link']");
+            const interactive = el.closest("button, a, input[type='submit'], input[type='button'], [role='button'], [role='link'], [role='combobox'], [role='option']");
             if (interactive) {
                 const tag = interactive.tagName.toLowerCase();
                 const selector = getElementSelector(interactive);
@@ -175,6 +177,18 @@ async def record_session(url: str, output_path: Path) -> None:
                 }
             }
         }, true);
+
+        document.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") {
+                const el = e.target;
+                if (el.tagName.toLowerCase() === "input" && ["text", "email", "password", "search", "tel", "url"].includes(el.type)) {
+                    const selector = getElementSelector(el);
+                    if (selector) {
+                        window.md_e2e_record_action({ action: "PRESS", target: "Enter" });
+                    }
+                }
+            }
+        }, true);
     })();
     """
 
@@ -205,6 +219,13 @@ async def record_session(url: str, output_path: Path) -> None:
 
         # Wait until browser is closed
         await exit_future
+
+        # Explicitly close context and browser to prevent resource leaks/races
+        try:
+            await context.close()
+            await browser.close()
+        except Exception:
+            pass
 
         # Save to markdown output
         out_p = Path(output_path)

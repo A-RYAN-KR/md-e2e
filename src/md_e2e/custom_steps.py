@@ -6,13 +6,21 @@ import contextvars
 import inspect
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .models import TestStep
 from .variables import VariableStore
 
-# Registry of custom steps: list of tuple (compiled_regex, handler_func)
-_custom_steps_registry: list[tuple[re.Pattern, Callable[..., Any]]] = []
+@dataclass
+class CustomStepEntry:
+    pattern: re.Pattern
+    handler: Callable[..., Any]
+    source_dir: Path
+
+# Registry of custom steps
+_custom_steps_registry: list[CustomStepEntry] = []
 
 # ContextVar to make the pytest Request object accessible during custom step execution
 current_request: contextvars.ContextVar[Any] = contextvars.ContextVar("current_request", default=None)
@@ -23,9 +31,14 @@ class StepNotImplementedError(NotImplementedError):
 
     def __init__(self, step: TestStep):
         self.step = step
+        file_loc = f"{step.file_path}:" if getattr(step, "file_path", None) else ""
         super().__init__(
-            f"Custom step at line {step.line_number} has no registered "
-            f"handler: {step.raw_text!r}"
+            f"\n[md-e2e] Unrecognized step at {file_loc}{step.line_number}:\n"
+            f"  '{step.raw_text}'\n\n"
+            f"To implement this step, define a handler in conftest.py:\n"
+            f"  @custom_step(r'{re.escape(step.raw_text)}')\n"
+            f"  async def my_step(page):\n"
+            f"      # Your Playwright logic\n"
         )
 
 
@@ -42,9 +55,20 @@ def custom_step(pattern: str) -> Callable[[Callable[..., Any]], Callable[..., An
     """
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         compiled = re.compile(pattern)
-        _custom_steps_registry.append((compiled, func))
+        try:
+            frame = inspect.stack()[1]
+            source_dir = Path(frame.filename).parent.resolve()
+        except Exception:
+            source_dir = Path.cwd().resolve()
+        _custom_steps_registry.append(CustomStepEntry(compiled, func, source_dir))
         return func
     return decorator
+
+
+def clear_custom_steps() -> None:
+    """Clear all registered custom steps from the global registry."""
+    _custom_steps_registry.clear()
+
 
 
 async def _execute_custom_step(
@@ -64,10 +88,18 @@ async def _execute_custom_step(
     handler: Callable[..., Any] | None = None
     match: re.Match | None = None
 
-    for pattern, func in _custom_steps_registry:
-        m = pattern.match(resolved_text)
+    for entry in _custom_steps_registry:
+        if getattr(step, "file_path", None):
+            try:
+                step_dir = step.file_path.parent.resolve()
+                if entry.source_dir not in step_dir.parents and entry.source_dir != step_dir:
+                    continue
+            except Exception:
+                pass
+
+        m = entry.pattern.match(resolved_text)
         if m:
-            handler = func
+            handler = entry.handler
             match = m
             break
 

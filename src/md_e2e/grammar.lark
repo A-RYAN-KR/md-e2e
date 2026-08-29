@@ -43,6 +43,8 @@ click:        CLICK_KW TESTID_KW QSTR
 fill:         FILL_KW TESTID_KW QSTR WITH_KW QSTR
             | FILL_KW TARGET_TYPE QSTR WITH_KW QSTR
             | FILL_KW QSTR WITH_KW QSTR
+            | FILL_KW QSTR INTO_KW TARGET_TYPE QSTR -> fill_reversed
+            | FILL_KW QSTR INTO_KW QSTR             -> fill_reversed
 select_option: SELECT_KW QSTR FROM_KW QSTR
 hover:        HOVER_KW TESTID_KW QSTR
             | HOVER_KW TARGET_TYPE QSTR
@@ -103,21 +105,22 @@ VARIABLE_KW.5:      /(?i)variable/
 TESTID_KW.4:        /(?i)testid/
 
 // Single-word keywords
-CLICK_KW.3:    /(?i)click/
-FILL_KW.3:     /(?i)fill/
+CLICK_KW.3:    /(?i)click(?:\s+on)?/
+FILL_KW.3:     /(?i)(?:fill|type|enter)/
 SELECT_KW.3:   /(?i)select/
 PRESS_KW.3:    /(?i)press/
 UPLOAD_KW.3:   /(?i)upload/
 CHECK_KW.3:    /(?i)check/
 UNCHECK_KW.3:  /(?i)uncheck/
 ASSERT_KW.3:   /(?i)assert/
-WAIT_KW.3:     /(?i)wait/
+WAIT_KW.3:     /(?i)wait(?:\s+for)?/
 WITH_KW.3:     /(?i)with/
+INTO_KW.3:     /(?i)(?:into|in)/
 FROM_KW.3:     /(?i)from/
 TO_KW.3:       /(?i)to/
 AS_KW.3:       /(?i)as/
 VALUE_KW.3:    /(?i)value/
-SECONDS_KW.3:  /(?i)seconds?/
+SECONDS_KW.3:  /(?i)(?:seconds?|s)/
 CMP.3:         /(?i)(?:matches|contains|equals|equal|is)/
 
 // Element-type hints — lower priority so they lose to keywords above

@@ -256,6 +256,12 @@ $env:OPENAI_API_KEY="sk-..."        # Windows PowerShell
 ```
 Or pass directly: `md-e2e run tests/ --llm-api-key "sk-..."`.
 
+For custom OpenAI-compatible endpoints (e.g., Azure, Ollama, LM Studio), set these variables:
+```bash
+export LLM_BASE_URL="http://localhost:11434/v1"
+export LLM_MODEL="llama3.1"
+```
+
 ### Auto-Generated Git Patches
 At the end of a run, healed steps produce a `git apply`-compatible patch:
 ```diff

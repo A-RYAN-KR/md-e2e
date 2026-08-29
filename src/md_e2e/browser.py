@@ -14,6 +14,8 @@ Architecture
 from __future__ import annotations
 
 import os
+import re
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -74,11 +76,17 @@ class BrowserConfig:
     enable_healing: bool = True
     healing_cache_path: Path | str | None = ".md_e2e_cache.json"
     llm_api_key: str | None = None
+    llm_timeout: int = 10
     clean_session: bool = False
 
     def __post_init__(self) -> None:
         if self.llm_api_key is None:
             self.llm_api_key = os.environ.get("MD_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if os.environ.get("MD_LLM_TIMEOUT"):
+            try:
+                self.llm_timeout = int(os.environ["MD_LLM_TIMEOUT"])
+            except ValueError:
+                pass
 
 
 
@@ -145,12 +153,12 @@ class BrowserSession:
 class _ContextManager:
     """Async context manager that creates and tears down a BrowserContext."""
 
-    def __init__(self, session: BrowserSession, *, trace: bool = False):
+    def __init__(self, session: BrowserSession, *, trace: bool = False, name: str = ""):
         self._session = session
         self._trace = trace
+        self._name = name or f"trace_{uuid.uuid4().hex[:8]}"
         self._context: BrowserContext | None = None
         self._page: Page | None = None
-        self._trace_name: str | None = None
 
     @property
     def context(self) -> BrowserContext:
@@ -209,7 +217,8 @@ class _ContextManager:
         # Save trace on failure
         if exc_type and self._trace and cfg.trace_dir and self._context:
             try:
-                trace_path = Path(cfg.trace_dir) / "failure_trace.zip"
+                safe_name = re.sub(r'[^\w\-.]', '_', self._name)
+                trace_path = Path(cfg.trace_dir) / f"{safe_name}_failure.zip"
                 trace_path.parent.mkdir(parents=True, exist_ok=True)
                 await self._context.tracing.stop(path=str(trace_path))
                 self._trace = False

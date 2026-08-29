@@ -36,22 +36,23 @@ def _ensure_utf8_stdout() -> None:
             stream = getattr(sys, stream_name)
             if hasattr(stream, "encoding") and (stream.encoding or "").lower() not in ("utf-8", "utf8"):
                 try:
-                    wrapped = io.TextIOWrapper(
-                        stream.buffer,
-                        encoding="utf-8",
-                        errors="replace",
-                        line_buffering=stream.line_buffering,
-                    )
-                    setattr(sys, stream_name, wrapped)
+                    if hasattr(stream, "reconfigure"):
+                        stream.reconfigure(encoding="utf-8", errors="replace")
+                    else:
+                        wrapped = io.TextIOWrapper(
+                            stream.buffer,
+                            encoding="utf-8",
+                            errors="replace",
+                            line_buffering=stream.line_buffering,
+                        )
+                        setattr(sys, stream_name, wrapped)
                 except Exception:
                     pass  # If wrapping fails, fall through to Rich's own handling
 
 
-_ensure_utf8_stdout()
-
-
 def _safe_console() -> Console:
     """Create a Rich Console that is safe for the current terminal."""
+    _ensure_utf8_stdout()
     return Console(file=sys.stdout, highlight=False)
 
 
@@ -120,11 +121,12 @@ _MAX_ERROR_DETAIL_LEN = 2000
 # Patterns that indicate Playwright verbose call log noise
 _PLAYWRIGHT_NOISE_MARKERS = [
     "Call log:",
-    "waiting for",
-    "============",
+    "waiting for locator(",
+    "============ logs ============",
     "Locator resolved to",
     "  - ",
-    "attempting",
+    "attempting click action",
+    "attempting fill action",
 ]
 
 
@@ -247,6 +249,8 @@ def find_test_files(path: Path) -> list[Path]:
     files = []
     for p in path.rglob("*.md"):
         if "fixtures" in p.parts:
+            continue
+        if p.name.lower() in ("readme.md", "changelog.md", "contributing.md", "license.md", "summary.md"):
             continue
         is_test = (
             p.name.endswith(".test.md")

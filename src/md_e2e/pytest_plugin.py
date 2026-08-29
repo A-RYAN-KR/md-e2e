@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import logging
 import re
 import threading
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import pytest
 
@@ -117,6 +120,8 @@ def pytest_collect_file(
     """Intercept *.test.md, *.spec.md, or any .md file under tests/ or e2e/ directories."""
     path = Path(file_path)
     if "fixtures" in path.parts:
+        return None
+    if path.name.lower() in ("readme.md", "changelog.md", "contributing.md", "license.md", "summary.md"):
         return None
     is_test_pattern = (
         path.suffix == ".md"
@@ -232,8 +237,8 @@ class MarkdownFile(pytest.File):
                             self.suite_store,
                             config,
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(f"Error in pytest suite teardown hook: {e}")
 
 
 def _dummy_run():

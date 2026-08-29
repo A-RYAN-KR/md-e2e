@@ -373,18 +373,19 @@ class TestCustomFallback:
     def test_unrecognised_step_tagged_custom(self):
         step, err = parse_step("Do something completely custom")
         assert step.action_type == ActionType.CUSTOM
-        assert err is not None
-        assert "CUSTOM" in err.message
+        assert err is None
 
     def test_custom_preserves_raw_text(self):
         step, err = parse_step("Verify database has 5 records", line_number=42)
         assert step.action_type == ActionType.CUSTOM
         assert step.raw_text == "Verify database has 5 records"
+        assert err is None
         assert step.line_number == 42
 
     def test_custom_with_variables(self):
         step, err = parse_step("Send email to {{recipient}}")
         assert step.action_type == ActionType.CUSTOM
+        assert err is None
         assert "recipient" in step.variables
 
 

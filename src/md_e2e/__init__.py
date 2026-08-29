@@ -8,7 +8,7 @@ Public API re-exports for convenience::
 """
 
 from .browser import BrowserConfig, BrowserSession
-from .custom_steps import custom_step
+from .custom_steps import clear_custom_steps, custom_step
 from .dsl_parser import parse_step
 from .executor import (
     ScenarioResult,
@@ -32,7 +32,7 @@ from .models import (
 )
 from .variables import UndefinedVariableError, VariableStore
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "__version__",
@@ -52,6 +52,7 @@ __all__ = [
     "TestSuite",
     "UndefinedVariableError",
     "VariableStore",
+    "clear_custom_steps",
     "custom_step",
     "execute_scenario",
     "execute_step",

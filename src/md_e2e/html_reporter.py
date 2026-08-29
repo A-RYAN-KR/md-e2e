@@ -148,6 +148,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
         .badge-passed {{ background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }}
         .badge-failed {{ background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }}
         .badge-healed {{ background: rgba(6, 182, 212, 0.2); color: var(--accent-cyan); }}
+        .badge-skipped {{ background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }}
         .step-list {{
             margin-top: 1rem;
             padding-left: 1rem;
@@ -271,10 +272,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
 
     <div class="controls">
-        <button class="filter-btn active" onclick="filterReport('all')">All</button>
-        <button class="filter-btn" onclick="filterReport('passed')">Passed</button>
-        <button class="filter-btn" onclick="filterReport('failed')">Failed</button>
-        <button class="filter-btn" onclick="filterReport('healed')">Healed</button>
+        <button class="filter-btn active" onclick="filterReport('all', this)">All</button>
+        <button class="filter-btn" onclick="filterReport('passed', this)">Passed</button>
+        <button class="filter-btn" onclick="filterReport('failed', this)">Failed</button>
+        <button class="filter-btn" onclick="filterReport('healed', this)">Healed</button>
         <input type="text" class="search-input" id="searchInput" onkeyup="searchReport()" placeholder="Search scenarios..." />
     </div>
 
@@ -285,15 +286,18 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     {diff_section_html}
 
     <script>
-        function filterReport(type) {{
+        function filterReport(type, element) {{
             document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            if (element) {{
+                element.classList.add('active');
+            }}
             
             document.querySelectorAll('.scenario-item').forEach(item => {{
                 if (type === 'all') item.style.display = 'block';
                 else if (type === 'passed' && item.dataset.status === 'PASSED') item.style.display = 'block';
                 else if (type === 'failed' && item.dataset.status === 'FAILED') item.style.display = 'block';
                 else if (type === 'healed' && item.dataset.healed === 'true') item.style.display = 'block';
+                else if (type === 'skipped' && item.dataset.status === 'SKIPPED') item.style.display = 'block';
                 else item.style.display = 'none';
             }});
         }}
@@ -354,8 +358,7 @@ def generate_html_report(suite_results: list[SuiteResult], output_path: Path) ->
                 badge_class = "badge-healed" if sc_healed else "badge-passed"
                 badge_text = "PASSED (HEALED)" if sc_healed else "PASSED"
             elif sc.status == StepStatus.SKIPPED:
-                passed_scenarios += 1
-                badge_class = "badge-passed"
+                badge_class = "badge-skipped"
                 badge_text = "SKIPPED"
             else:
                 failed_scenarios += 1
@@ -487,7 +490,7 @@ def generate_html_report(suite_results: list[SuiteResult], output_path: Path) ->
         """
 
     html_content = _HTML_TEMPLATE.format(
-        timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        timestamp=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
         total_scenarios=total_scenarios,
         passed_scenarios=passed_scenarios,
         failed_scenarios=failed_scenarios,
