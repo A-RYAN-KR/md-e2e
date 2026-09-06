@@ -82,10 +82,18 @@ class VariableStore:
     def __init__(self, initial: dict[str, str] | None = None) -> None:
         self._data: dict[str, str] = dict(initial) if initial else {}
         self._generated: dict[str, str] = {}
+        self._local_writes: dict[str, str] = {}
 
     def store(self, name: str, value: str) -> None:
         """Set a variable in the store."""
-        self._data[name] = str(value)
+        val = str(value)
+        target_key = name
+        for k in self._data:
+            if k.lower() == name.lower():
+                target_key = k
+                break
+        self._data[target_key] = val
+        self._local_writes[target_key] = val
 
     def get(self, name: str) -> str:
         """Resolve a variable name to its string value."""
@@ -162,11 +170,21 @@ class VariableStore:
         return dict(self._data)
 
     def merge(self, overrides: dict[str, str]) -> VariableStore:
-        """Return a *new* store with current data + overrides (non-mutating)."""
+        """Return a *new* store with current data + overrides (non-mutating).
+
+        The merged store receives a fresh `_generated` cache so that generated
+        values (RANDOM_STRING, RANDOM_EMAIL, TIMESTAMP) are newly generated
+        for the new execution scope rather than retaining stale values from the parent.
+        """
         merged = VariableStore(self._data)
-        merged._generated = dict(self._generated)
+        # Note: self._generated is intentionally NOT copied here (EXEC-006)
         merged._data.update(overrides)
         return merged
+
+    def commit_to(self, target: VariableStore) -> None:
+        """Commit locally written variables back into a target parent store."""
+        for k, v in self._local_writes.items():
+            target.store(k, v)
 
     def __repr__(self) -> str:
         return f"VariableStore({self._data!r})"
