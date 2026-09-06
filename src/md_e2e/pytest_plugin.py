@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import os
 import re
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any
@@ -166,6 +168,12 @@ class MarkdownFile(pytest.File):
         self.total_tests = 0
         self.completed_tests = 0
         self.lock = threading.Lock()
+        self.setup_success = False
+        self.setup_error = None
+        self.teardown_run = False
+        self._temp_state_file: str | None = None
+        self._browser_session: BrowserSession | None = None
+        self._browser_config: BrowserConfig | None = None
 
     def collect(self) -> list[MarkdownScenarioItem]:
         from .md_parser import parse_markdown_file
@@ -190,6 +198,11 @@ class MarkdownFile(pytest.File):
         self.total_tests = len(items)
         collected_items = []
 
+        if not hasattr(self.session, "_md_files"):
+            self.session._md_files = []  # type: ignore[attr-defined]
+        if self not in self.session._md_files:  # type: ignore[attr-defined]
+            self.session._md_files.append(self)  # type: ignore[attr-defined]
+
         for test_case, case_row_idx, params in items:
             name = test_case.name
             if case_row_idx is not None and params:
@@ -209,36 +222,67 @@ class MarkdownFile(pytest.File):
         return collected_items
 
     async def ensure_suite_setup(self, config: BrowserConfig) -> None:
-        """Run suite-level setup hook exactly once per file."""
+        """Run suite-level setup hook exactly once per file.
+
+        Persists storage state (cookies/localStorage) from the setup context
+        so subsequent scenario contexts inherit the authenticated session.
+        """
         with self.lock:
             if self.setup_run:
+                if self.setup_error:
+                    raise self.setup_error
                 return
             self.setup_run = True
 
         if self.suite and self.suite.suite_setup_code:
-            async with BrowserSession(config) as session:
-                async with session.new_context() as (_ctx, page):
-                    await _run_hook(
-                        self.suite.suite_setup_code,
-                        page,
-                        self.suite_store,
-                        config,
-                    )
+            try:
+                async with BrowserSession(config) as session:
+                    async with session.new_context() as (setup_ctx, page):
+                        await _run_hook(
+                            self.suite.suite_setup_code,
+                            page,
+                            self.suite_store,
+                            config,
+                        )
+                        # Persist storage state so scenario contexts inherit
+                        # cookies/localStorage set during suite setup.
+                        with tempfile.NamedTemporaryFile(
+                            suffix=".json", delete=False
+                        ) as tf:
+                            self._temp_state_file = tf.name
+                        await setup_ctx.storage_state(path=self._temp_state_file)
+                self.setup_success = True
+            except Exception as e:
+                self.setup_error = e
+                raise
 
     async def ensure_suite_teardown(self, config: BrowserConfig) -> None:
         """Run suite-level teardown hook exactly once after all tests complete."""
-        if self.suite and self.suite.suite_teardown_code:
-            async with BrowserSession(config) as session:
-                async with session.new_context() as (_ctx, page):
-                    try:
+        with self.lock:
+            if self.teardown_run:
+                return
+            self.teardown_run = True
+
+        try:
+            if self.suite and self.suite.suite_teardown_code:
+                async with BrowserSession(config) as session:
+                    async with session.new_context() as (_ctx, page):
                         await _run_hook(
                             self.suite.suite_teardown_code,
                             page,
                             self.suite_store,
                             config,
                         )
-                    except Exception as e:
-                        logger.error(f"Error in pytest suite teardown hook: {e}")
+        except Exception as e:
+            logger.error(f"Error in pytest suite teardown hook: {e}")
+        finally:
+            # Clean up temporary state file
+            if self._temp_state_file and os.path.exists(self._temp_state_file):
+                try:
+                    os.remove(self._temp_state_file)
+                except OSError:
+                    pass
+            self._temp_state_file = None
 
 
 def _dummy_run():
@@ -292,24 +336,36 @@ class MarkdownScenarioItem(pytest.Function):
                 # 1. Run suite setup
                 await self.parent_file.ensure_suite_setup(config)
 
-                # 2. Copy case and isolate store
-                case_store = VariableStore(self.parent_file.suite_store.snapshot())
+                # 2. Copy case and isolate store (inheriting suite setup variables)
+                case_store = self.parent_file.suite_store.merge({})
                 tc = copy.copy(self.test_case)
+                tc.steps = [copy.deepcopy(s) for s in self.test_case.steps]
                 if self.params is not None:
                     tc.parameters = [self.params]
 
-                # 3. Execute scenario
-                async with BrowserSession(config) as session:
-                    enable_trace = config.trace_dir is not None
+                # 3. Apply persisted storage state from suite setup
+                run_config = config
+                if self.parent_file._temp_state_file:
+                    run_config = copy.copy(config)
+                    run_config.storage_state = self.parent_file._temp_state_file
+
+                # 4. Execute scenario
+                async with BrowserSession(run_config) as session:
+                    enable_trace = run_config.trace_dir is not None
                     ctx_mgr = session.new_context(trace=enable_trace)
                     async with ctx_mgr as (_ctx, page):
                         results = await execute_scenario(
-                            tc, page, case_store, config,
+                            tc, page, case_store, run_config,
                             suite_name=self.parent_file.suite.name,
                             file_path=self.path,
                             cache=self.parent_file.suite_cache,
+                            base_row_idx=self.row_idx or 0,
                         )
                         result = results[0]
+
+                        # Commit stored variables back to suite store if clean_session=False and not a matrix row
+                        if not config.clean_session and self.params is None:
+                            case_store.commit_to(self.parent_file.suite_store)
 
                         # Accumulate results in pytest session for report generation
                         from .executor import SuiteResult
@@ -396,7 +452,11 @@ class MarkdownScenarioItem(pytest.Function):
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Generate Markdown and HTML reports on session completion."""
+    """Ensure suite teardowns run and generate Markdown and HTML reports on session completion."""
+    for md_file in getattr(session, "_md_files", []):
+        if not md_file.teardown_run:
+            asyncio.run(md_file.ensure_suite_teardown(md_file._browser_config or BrowserConfig()))
+
     report_md = session.config.getoption("--md-report-md")
     report_html = session.config.getoption("--md-report-html")
     
