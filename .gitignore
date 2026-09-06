@@ -23,6 +23,8 @@ ENV/
 .ruff_cache/
 .coverage
 htmlcov/
+.tox/
+.nox/
 .md_e2e_cache.json
 
 # Test Output Artifacts & Traces
@@ -32,9 +34,24 @@ summary.md
 report.html
 *.webm
 *.png
+*.log
+test_output/
+reports/
+screenshots/
+videos/
+traces/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
 
 # IDEs & System Files
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
 .DS_Store
+Thumbs.db
+desktop.ini
