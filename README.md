@@ -5,7 +5,7 @@
 ### *The Zero-Glue-Code, Markdown-Native E2E Test Automation Framework powered by Playwright*
 
 [![Build Status](https://img.shields.io/badge/build-passing-34d399?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/contributors/md-e2e/actions)
-[![PyPI Version](https://img.shields.io/badge/pypi-v0.3.0-38bdf8?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/md-e2e)
+[![PyPI Version](https://img.shields.io/badge/pypi-v0.4.0-38bdf8?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/md-e2e)
 [![Python Support](https://img.shields.io/badge/python-3.11%20%7C%203.12-fbbf24?style=for-the-badge&logo=python&logoColor=white)](https://pypi.org/project/md-e2e)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg?style=for-the-badge&logo=ruff)](https://github.com/astral-sh/ruff)
 [![Type Checked: Mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg?style=for-the-badge&logo=python)](https://github.com/python/mypy)

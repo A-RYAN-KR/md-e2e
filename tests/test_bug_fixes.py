@@ -27,8 +27,8 @@ from md_e2e.executor import _css_escape_value as exec_css_escape
 
 
 def test_bug1_version_match():
-    """BUG-1: md_e2e.__version__ must match pyproject.toml version (0.3.0)."""
-    assert md_e2e.__version__ == "0.3.0"
+    """BUG-1: md_e2e.__version__ must match pyproject.toml version (0.4.0)."""
+    assert md_e2e.__version__ == "0.4.0"
 
 
 def test_bug2_hook_trusted_code():

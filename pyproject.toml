@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "md-e2e"
-version = "0.3.0"
+version = "0.4.0"
 description = "Zero-Glue-Code, Markdown-Based E2E Test Runner powered by Playwright"
 readme = "README.md"
 license = {text = "MIT"}
