@@ -61,6 +61,13 @@
 
 md-e2e uses a multi-tier prioritized resolution model to locate DOM elements with high fidelity, preventing race conditions and fragile CSS selector failures.
 
+<p align="center">
+  <img src="assets/architecture-diagram.png" alt="md-e2e Architecture & Locator Engine" width="900"/>
+</p>
+
+<details>
+<summary><b>View Flowchart Source (Mermaid)</b></summary>
+
 ```mermaid
 flowchart TD
     Step["Step: Click button 'Submit'"] --> Engine{"Raw Selector?"}
@@ -83,6 +90,8 @@ flowchart TD
     Heal -- "Yes & Healable" --> Snapshot["DOM Snapshot & Safeguard Evaluation"]
     Heal -- "No or Assertion" --> Fail["Raise TimeoutError"]
 ```
+
+</details>
 
 ### Raw Selectors vs Natural Language
 md-e2e understands when an identifier is a technical CSS/Playwright selector versus natural language text:

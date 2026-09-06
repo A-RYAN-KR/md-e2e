@@ -34,6 +34,8 @@ summary.md
 report.html
 *.webm
 *.png
+!assets/
+!assets/**
 *.log
 test_output/
 reports/
