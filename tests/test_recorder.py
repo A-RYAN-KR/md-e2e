@@ -32,6 +32,19 @@ def test_format_action_to_dsl() -> None:
     unknown_step = format_action_to_dsl({"action": "UNKNOWN"})
     assert unknown_step == ""
 
+def test_format_action_to_dsl_escaping() -> None:
+    """Test that newlines, quotes, and backslashes are properly escaped."""
+    # Test Quotes
+    quote_step = format_action_to_dsl({"action": "FILL", "target": 'Name', "value": 'John "Johnny" Smith'})
+    assert quote_step == '- Fill input "Name" with "John \\"Johnny\\" Smith"'
+    
+    # Test Newlines
+    newline_step = format_action_to_dsl({"action": "FILL", "target": "Bio", "value": "Line 1\nLine 2\r\nLine 3"})
+    assert newline_step == '- Fill input "Bio" with "Line 1\\nLine 2\\r\\nLine 3"'
+    
+    # Test Backslashes
+    slash_step = format_action_to_dsl({"action": "FILL", "target": "Path", "value": "C:\\Windows\\System32"})
+    assert slash_step == '- Fill input "Path" with "C:\\\\Windows\\\\System32"'
 
 def test_generate_markdown_spec(tmp_path: Path) -> None:
     """Test markdown specification document generation."""

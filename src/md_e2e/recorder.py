@@ -17,10 +17,19 @@ def format_action_to_dsl(action_data: dict[str, Any]) -> str:
     value = str(action_data.get("value", ""))
     url = str(action_data.get("url", ""))
 
-    # Clean quotes
-    target = target.replace('"', '\\"')
-    value = value.replace('"', '\\"')
-    url = url.replace('"', '\\"')
+    def escape_str(s: str) -> str:
+        if not s:
+            return ""
+        s = s.replace("\\", "\\\\")
+        s = s.replace('"', '\\"')
+        s = s.replace("\n", "\\n")
+        s = s.replace("\r", "\\r")
+        return s
+
+    # Clean quotes and newlines
+    target = escape_str(target)
+    value = escape_str(value)
+    url = escape_str(url)
 
     if action == "NAVIGATE":
         return f'- Navigate to "{url}"'
@@ -171,7 +180,15 @@ async def record_session(url: str, output_path: Path) -> None:
             const el = e.target;
             if ((el.tagName.toLowerCase() === "input" && ["text", "email", "password", "search", "tel", "url"].includes(el.type)) || el.tagName.toLowerCase() === "textarea") {
                 const selector = getElementSelector(el);
-                const value = el.value;
+                let value = el.value;
+                
+                // Redact sensitive values
+                if (el.type === "password" || 
+                    el.getAttribute("autocomplete") === "current-password" || 
+                    el.getAttribute("autocomplete") === "new-password") {
+                    value = "<PASSWORD>";
+                }
+                
                 if (selector && value !== undefined && value !== "") {
                     window.md_e2e_record_action({ action: "FILL", target: selector, value: value });
                 }

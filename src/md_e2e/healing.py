@@ -153,17 +153,25 @@ _DOM_SNAPSHOT_JS = """
         style.opacity !== '0'
       );
     })
-    .map(el => ({
-      tagName: el.tagName.toLowerCase(),
-      role: el.getAttribute('role') || el.type || el.tagName.toLowerCase(),
-      id: el.id || '',
-      name: el.getAttribute('name') || '',
-      text: (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' '),
-      ariaLabel: el.getAttribute('aria-label') || '',
-      placeholder: el.getAttribute('placeholder') || '',
-      value: el.value || '',
-      testId: el.getAttribute('data-testid') || ''
-    }));
+    .map(el => {
+      let val = el.value || '';
+      if (el.type === 'password' || 
+          el.getAttribute('autocomplete') === 'current-password' || 
+          el.getAttribute('autocomplete') === 'new-password') {
+        val = '<PASSWORD>';
+      }
+      return {
+        tagName: el.tagName.toLowerCase(),
+        role: el.getAttribute('role') || el.type || el.tagName.toLowerCase(),
+        id: el.id || '',
+        name: el.getAttribute('name') || '',
+        text: (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' '),
+        ariaLabel: el.getAttribute('aria-label') || '',
+        placeholder: el.getAttribute('placeholder') || '',
+        value: val,
+        testId: el.getAttribute('data-testid') || ''
+      };
+    });
 }
 """
 
@@ -407,10 +415,9 @@ _HEALABLE_ACTIONS = {
     ActionType.UPLOAD,
     ActionType.CHECK,
     ActionType.UNCHECK,
-    ActionType.ASSERT_VISIBLE,
-    ActionType.ASSERT_VALUE,
-    # NOTE: ASSERT_TITLE intentionally excluded — page titles are not in the
-    # interactive DOM snapshot, so healing would match random element text.
+    # NOTE: Assertions (ASSERT_VISIBLE, ASSERT_VALUE, ASSERT_TITLE, etc.)
+    # are strictly excluded. Healing an assertion mutates the acceptance
+    # criteria of the test, leading to dangerous false positives.
 }
 
 

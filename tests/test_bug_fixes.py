@@ -31,8 +31,8 @@ def test_bug1_version_match():
     assert md_e2e.__version__ == "0.3.0"
 
 
-def test_bug2_hook_sandbox_builtins():
-    """BUG-2: _run_hook restricts dangerous builtins (open, exec, eval, etc.)."""
+def test_bug2_hook_trusted_code():
+    """BUG-2: _run_hook treats code as trusted Python (no fake sandbox)."""
     from md_e2e.executor import _run_hook
     from md_e2e.browser import BrowserConfig
     from unittest.mock import MagicMock
@@ -41,9 +41,10 @@ def test_bug2_hook_sandbox_builtins():
     store = VariableStore()
     config = BrowserConfig()
 
-    malicious_code = "f = open('test.txt', 'w')"
-    with pytest.raises(Exception):
-        asyncio.run(_run_hook(malicious_code, mock_page, store, config))
+    # The code should be able to access standard builtins without raising NameError
+    trusted_code = "import os\nstore.store('is_trusted', 'yes')"
+    asyncio.run(_run_hook(trusted_code, mock_page, store, config))
+    assert store.get("is_trusted") == "yes"
 
 
 def test_bug3_angle_brackets_safe_html_and_params():

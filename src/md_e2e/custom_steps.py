@@ -89,7 +89,7 @@ async def _execute_custom_step(
     match: re.Match | None = None
 
     for entry in _custom_steps_registry:
-        if getattr(step, "file_path", None):
+        if step.file_path is not None:
             try:
                 step_dir = step.file_path.parent.resolve()
                 if entry.source_dir not in step_dir.parents and entry.source_dir != step_dir:

@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from md_e2e.models import ActionType, TargetType, TestStep, TestCase, TestSuite
-from md_e2e.executor import StepResult, ScenarioResult, SuiteResult, StepStatus, execute_step
+from md_e2e.executor import StepResult, ScenarioResult, SuiteResult, StepStatus, execute_step, wait_and_pick_locator
 from md_e2e.html_reporter import generate_html_report
 from md_e2e.reporting import generate_markdown_report
 from md_e2e.dsl_parser import parse_step
@@ -133,14 +133,16 @@ async def test_locator_compound_or_strict_mode(test_server: str) -> None:
             await page.goto(f"{test_server}/test_app.html")
 
             # Input with both aria-label="Email" and placeholder="Enter your email"
-            locator = resolve_locator(page, TargetType.INPUT, "Email")
+            tiers = resolve_locator(page, TargetType.INPUT, "Email")
+            locator = await wait_and_pick_locator(tiers, 5000)
             # Should resolve smoothly to a single element with .first
             await locator.fill("test@example.com")
             val = await locator.input_value()
             assert val == "test@example.com"
 
             # Button with quotes / special characters in CSS fallback
-            btn = resolve_locator(page, TargetType.BUTTON, 'Sign In')
+            btn_tiers = resolve_locator(page, TargetType.BUTTON, 'Sign In')
+            btn = await wait_and_pick_locator(btn_tiers, 5000)
             assert await btn.is_visible()
 
 
@@ -229,3 +231,42 @@ def test_cli_summary_table_counts() -> None:
     )
     has_failures = print_results_table([suite_res])
     assert has_failures is True
+
+
+# ---------------------------------------------------------------------------
+# 9. Security: LLM DOM Snapshot Redaction
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_dom_snapshot_password_redaction(test_server: str) -> None:
+    """Verify that password values are redacted from DOM snapshots sent to LLM."""
+    from md_e2e.healing import clean_dom_snapshot
+    config = BrowserConfig(headless=True)
+    async with BrowserSession(config) as session:
+        async with session.new_context() as (_ctx, page):
+            # Create a page with a password field
+            await page.set_content('''
+                <html>
+                <body>
+                    <input type="text" id="username" value="admin123">
+                    <input type="password" id="pass" value="SuperSecret">
+                    <input type="text" id="newpass" autocomplete="new-password" value="AnotherSecret">
+                </body>
+                </html>
+            ''')
+            
+            elements = await clean_dom_snapshot(page)
+            
+            # Username should keep its value
+            username_el = next((e for e in elements if e["id"] == "username"), None)
+            assert username_el is not None
+            assert username_el["value"] == "admin123"
+            
+            # Passwords should be redacted
+            pass_el = next((e for e in elements if e["id"] == "pass"), None)
+            assert pass_el is not None
+            assert pass_el["value"] == "<PASSWORD>"
+            
+            newpass_el = next((e for e in elements if e["id"] == "newpass"), None)
+            assert newpass_el is not None
+            assert newpass_el["value"] == "<PASSWORD>"

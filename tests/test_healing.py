@@ -81,8 +81,8 @@ def test_fuzzy_heal_threshold_and_safeguards() -> None:
     assert fuzzy_heal(TargetType.BUTTON, "Delete User", opposing_elements) is None
 
 
-def test_bypass_negative_assertions() -> None:
-    """Test that negative assertions (ASSERT_HIDDEN) are strictly excluded from self-healing."""
+def test_bypass_assertions() -> None:
+    """Test that all assertions are strictly excluded from self-healing."""
     hidden_step = TestStep(
         raw_text='- Assert button "Delete" is hidden',
         line_number=5,
@@ -106,7 +106,7 @@ def test_bypass_negative_assertions() -> None:
     )
 
     assert is_healable_step(hidden_step) is False
-    assert is_healable_step(visible_step) is True
+    assert is_healable_step(visible_step) is False
     assert is_healable_step(click_step) is True
 
 
