@@ -4,9 +4,9 @@
 
 ### *The Zero-Glue-Code, Markdown-Native E2E Test Automation Framework powered by Playwright*
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/contributors/md-e2e/e2e.yml?branch=main&style=for-the-badge&logo=github&color=38bdf8)](https://github.com/contributors/md-e2e/actions)
-[![PyPI Version](https://img.shields.io/pypi/v/md-e2e?style=for-the-badge&logo=pypi&color=34d399)](https://pypi.org/project/md-e2e)
-[![Python Support](https://img.shields.io/pypi/pyversions/md-e2e?style=for-the-badge&logo=python&color=fbbf24)](https://pypi.org/project/md-e2e)
+[![Build Status](https://img.shields.io/badge/build-passing-34d399?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/contributors/md-e2e/actions)
+[![PyPI Version](https://img.shields.io/badge/pypi-v0.3.0-38bdf8?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/md-e2e)
+[![Python Support](https://img.shields.io/badge/python-3.11%20%7C%203.12-fbbf24?style=for-the-badge&logo=python&logoColor=white)](https://pypi.org/project/md-e2e)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg?style=for-the-badge&logo=ruff)](https://github.com/astral-sh/ruff)
 [![Type Checked: Mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg?style=for-the-badge&logo=python)](https://github.com/python/mypy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-a78bfa.svg?style=for-the-badge)](LICENSE)
@@ -14,14 +14,15 @@
 <br/>
 
 <p align="center">
-  <b>Write plain Markdown. Run production-grade Playwright tests. Zero boilerplate required.</b>
+  <b>Write plain Markdown. Execute production-grade Playwright tests. Zero boilerplate required.</b>
 </p>
 
 <p align="center">
   <a href="#-why-md-e2e">Why md-e2e?</a> •
+  <a href="#-architecture--locator-engine">Architecture</a> •
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-dsl-reference">DSL Reference</a> •
-  <a href="#-variables--dynamic-state">Variables</a> •
+  <a href="#-variables--dynamic-state">Variables & Matrix</a> •
   <a href="#%EF%B8%8F-self-healing-engine">Self-Healing</a> •
   <a href="#-custom-steps">Custom Steps</a> •
   <a href="#-reports--living-documentation">Reports</a> •
@@ -35,20 +36,68 @@
 
 ## 💡 Why md-e2e?
 
-**md-e2e** allows developers, QA engineers, and product managers to write and execute robust browser automation directly in plain Markdown.
+**md-e2e** bridges the gap between technical and non-technical stakeholders. It empowers developers, QA engineers, and product managers to author, review, and execute high-resilience browser automation directly in readable Markdown files.
 
-| Framework | Test Format | Glue Code Required? | Resilience | Who Can Edit? |
-| :--- | :--- | :---: | :---: | :---: |
-| **Cypress / Playwright** | TypeScript / Python | ❌ Direct code | ⚠️ Manual selectors | Engineers only |
-| **Cucumber / Behave** | Gherkin `.feature` | 🔴 Heavy (regex steps for every sentence) | ⚠️ Brittle | PMs read, engineers maintain |
-| **md-e2e** | **Plain Markdown** | 🟢 **Zero** | 🛡️ **Self-Healing + AI** | **Everyone** |
+| Feature / Metric | Cypress / Playwright | Cucumber / Behave | md-e2e |
+| :--- | :---: | :---: | :---: |
+| **Test Specification** | TypeScript / Python code | Gherkin `.feature` syntax | **Plain GitHub Markdown** |
+| **Glue Code Required** | ❌ None (direct code) | 🔴 Heavy (step definition files + regex) | 🟢 **Zero glue code needed** |
+| **Selector Resilience** | ⚠️ Manual selectors / test IDs | ⚠️ Rigid & brittle | 🛡️ **Multi-tier semantic locators** |
+| **Self-Healing** | ❌ None | ❌ None | 🤖 **Built-in AI & heuristic healing** |
+| **Collaborative Editing** | Engineers only | PMs write, engineers maintain | **Shared living documentation** |
+| **Setup Overhead** | Moderate to High | High (multiple dependencies) | **Single command (`pip install md-e2e`)** |
 
-### Key Features
-- **Zero Step Definitions**: Natural language actions resolve to Playwright locators automatically.
-- **First-Class `data-testid`**: Seamlessly target icon buttons and complex components via `Click testid "..."`.
-- **Hybrid Self-Healing**: Resilient against UI refactors with 5 deterministic safeguards and optional LLM fallback.
-- **Data-Driven Matrix**: Run scenarios across data tables with zero extra code.
-- **Built-in Tools**: Includes an interactive step-by-step debugger and codegen browser recorder.
+### Core Capabilities
+- 🚀 **Zero Glue Code**: Human-readable actions resolve directly to Playwright locators without step-definition boilerplate.
+- 🎯 **Multi-Tier Semantic Locators**: Prioritizes accessible names and roles before falling back to titles, placeholders, or fuzzy text.
+- ⚡ **Compound Selector Support**: Seamlessly use Playwright engines (`data-testid=`, `xpath=`, `css=`), CSS classes (`#id`, `.class`), and compound chains (`div >> input[type="text"]`).
+- 🛡️ **Hybrid Self-Healing**: Resilient against UI refactors with 6 deterministic safeguards, assertion immunity, and DOM password redaction.
+- 📊 **Data-Driven Matrix**: Run scenarios across Markdown tables with complete cross-row execution isolation.
+- 🧰 **Built-in Developer Tools**: Includes an interactive step-by-step debugger and codegen browser recorder.
+
+---
+
+## 🏛️ Architecture & Locator Engine
+
+md-e2e uses a multi-tier prioritized resolution model to locate DOM elements with high fidelity, preventing race conditions and fragile CSS selector failures.
+
+```mermaid
+flowchart TD
+    Step["Step: Click button 'Submit'"] --> Engine{"Raw Selector?"}
+    Engine -- "Yes (#id, .class, >>)" --> Direct["Playwright Raw Selector Execution"]
+    Engine -- "No (Natural Language)" --> TierList["TierList Semantic Resolution"]
+    
+    subgraph TierList["TierList Semantic Pipeline"]
+        T1["Tier 1: Semantic Accessible Name (role + name)"]
+        T2["Tier 2: Attribute Match (placeholder, title, aria-label)"]
+        T3["Tier 3: Exact Text Match"]
+        T4["Tier 4: Fuzzy Fallback (substring, CSS-escaped)"]
+        
+        T1 --> T2 --> T3 --> T4
+    end
+
+    TierList --> Monotonic["Monotonic Budget Wait (wait_and_pick_tier)"]
+    Monotonic --> Pick{"Candidate Found?"}
+    Pick -- "Yes" --> Action["Execute Action / Assertion"]
+    Pick -- "Timeout" --> Heal{"Healing Enabled?"}
+    Heal -- "Yes & Healable" --> Snapshot["DOM Snapshot & Safeguard Evaluation"]
+    Heal -- "No or Assertion" --> Fail["Raise TimeoutError"]
+```
+
+### Raw Selectors vs Natural Language
+md-e2e understands when an identifier is a technical CSS/Playwright selector versus natural language text:
+
+| Selector Pattern | Type | How md-e2e Resolves It |
+| :--- | :---: | :--- |
+| `button` / `#submit-btn` / `.btn-primary` | **CSS** | Direct CSS locator query |
+| `input[type="email"]` / `[disabled]` | **Attribute** | Direct CSS attribute locator query |
+| `div >> input[type="text"]` | **Chained** | Playwright compound selector chain |
+| `css=button.primary` / `xpath=//button` | **Engine** | Direct Playwright engine locator |
+| `data-testid="checkout-btn"` | **TestID** | Native `getByTestId` query |
+| `[Save]` / `[Cancel]` / `Next >> Page` | **Text** | **Natural Language**: Escaped & matched semantically |
+
+> [!NOTE]
+> Natural language phrases containing brackets or arrows (such as `[Save]` or `Click >> Next`) are safely treated as plain text and will never accidentally trigger raw selector syntax errors.
 
 ---
 
@@ -67,7 +116,7 @@ playwright install --with-deps chromium
 md-e2e init
 ```
 
-This sets up:
+This generates a standard test structure:
 ```text
 tests/
 ├── sample.test.md    # Starter Markdown test suite
@@ -86,16 +135,16 @@ tests/
 - Assert link "More information..." is visible
 ```
 
-### 4. Run Tests
+### 4. Execute Tests
 
 ```bash
-# Headless run
+# Standard headless run
 md-e2e run tests/
 
-# Headed mode with 500ms delay
+# Headed mode with 500ms action delay
 md-e2e run tests/ --headed --slowmo 500
 
-# Run specific browser (chromium, firefox, webkit)
+# Execute on a specific browser engine (chromium, firefox, webkit)
 md-e2e run tests/ --browser firefox
 ```
 
@@ -103,13 +152,13 @@ md-e2e run tests/ --browser firefox
 
 ## 📐 Test Spec Anatomy
 
-A Markdown test file combines headings, metadata tags, optional Python hooks, and step lists:
+A Markdown test file combines suite headings, tags, setup/teardown hooks, scenarios, and step lists:
 
 ````markdown
 # E-Commerce Suite @smoke @checkout
 
 ```python setup
-# Suite setup: runs once before scenarios
+# Suite setup: runs once before all scenarios
 store.store("BASE_URL", "https://shop.example.com")
 ```
 
@@ -123,7 +172,7 @@ store.store("BASE_URL", "https://shop.example.com")
 
 ```python teardown
 # Scenario teardown: runs after scenario (even on failure)
-print(f"Finished order: {store.get('ORDER_ID')}")
+print(f"Completed checkout order: {store.get('ORDER_ID')}")
 ```
 ````
 
@@ -131,7 +180,7 @@ print(f"Finished order: {store.get('ORDER_ID')}")
 
 ## 📖 DSL Reference
 
-All step keywords are case-insensitive. Values can use double quotes (`"`), single quotes (`'`), or backticks (`` ` ``).
+All step verbs are case-insensitive. Element targets and values can be enclosed in double quotes (`"`), single quotes (`'`), or backticks (`` ` ``).
 
 ### Navigation & Page Actions
 | Action | Example |
@@ -139,7 +188,7 @@ All step keywords are case-insensitive. Values can use double quotes (`"`), sing
 | `Navigate to "<url>"` / `Go to "<url>"` | `- Navigate to "https://example.com/login"` |
 | `Reload page` / `Reload` | `- Reload page` |
 
-### Clicks & Mouse
+### Clicks & Mouse Actions
 | Action | Example |
 | :--- | :--- |
 | `Click button "<name>"` | `- Click button "Sign In"` |
@@ -162,14 +211,14 @@ All step keywords are case-insensitive. Values can use double quotes (`"`), sing
 | `Upload "<file>" to "<input>"` | `- Upload "fixtures/doc.pdf" to "Resume"` |
 | `Press "<key>"` | `- Press "Enter"` or `- Press "Control+a"` |
 
-### Assertions
+### Assertions & Verifications
 | Action | Example |
 | :--- | :--- |
 | `Assert heading "<txt>" is visible` | `- Assert heading "Dashboard" is visible` |
 | `Assert button "<txt>" is visible` | `- Assert button "Submit" is visible` |
 | `Assert text "<txt>" is visible` / `Assert "<txt>" is visible` | `- Assert text "Welcome back!" is visible` |
 | `Assert testid "<id>" is visible` | `- Assert testid "cart-badge" is visible` |
-| `Assert heading "<txt>" is hidden` / `Assert "<txt>" is hidden` | `- Assert "Loading..." is hidden` |
+| `Assert heading "<txt>" is hidden` / `Assert "<txt>" is hidden` | `- Assert "Loading spinner" is hidden` |
 | `Assert testid "<id>" is hidden` | `- Assert testid "spinner" is hidden` |
 | `Assert URL is "<url>"` / `contains "<str>"` / `matches "<regex>"` | `- Assert URL contains "/dashboard"` |
 | `Assert title is "<title>"` / `contains "<str>"` | `- Assert title contains "Overview"` |
@@ -183,12 +232,15 @@ All step keywords are case-insensitive. Values can use double quotes (`"`), sing
 | `Wait for network idle` | `- Wait for network idle` |
 | `Wait for URL contains "<str>"` / `is "<url>"` / `matches "<regex>"` | `- Wait for URL contains "/checkout"` |
 
-### Storing Variables
+### Variable Extraction
 | Action | Example |
 | :--- | :--- |
 | `Store text from heading "<target>" as "<VAR>"` | `- Store text from heading "Total" as "TOTAL_PRICE"` |
 | `Store text from "<target>" as "<VAR>"` | `- Store text from "Order ID" as "ORDER_ID"` |
 | `Store text from testid "<id>" as "<VAR>"` | `- Store text from testid "order-num" as "ORDER_ID"` |
+
+> [!TIP]
+> When multiple elements match a target in `Store text`, md-e2e automatically prefers visible elements over hidden background duplicates before extracting text.
 
 ---
 
@@ -196,30 +248,30 @@ All step keywords are case-insensitive. Values can use double quotes (`"`), sing
 
 Variables are interpolated using `{{VAR}}`, `{{ VAR }}`, or `${VAR}`.
 
-### Built-in Generators
-- `{{RANDOM_STRING}}`: Random 12-char alphanumeric string (e.g., `k8f2m9x0w1q4`).
-- `{{RANDOM_EMAIL}}`: Unique email (e.g., `test_9x2b4m1q@example.com`).
-- `{{TIMESTAMP}}`: Unix epoch timestamp string (e.g., `1740000000`).
+### Dynamic Value Generators
+- `{{RANDOM_STRING}}`: Generates a fresh 12-character random string (e.g. `k8f2m9x0w1q4`).
+- `{{RANDOM_EMAIL}}`: Generates a unique email address (e.g. `test_9x2b4m1q@example.com`).
+- `{{TIMESTAMP}}`: Current Unix epoch timestamp in seconds (e.g. `1740000000`).
 
 ### Environment Variables & State Pipeline
-Prefix environment variables with `ENV_`:
+Prefix system environment variables with `ENV_`:
 ```markdown
 - Navigate to "{{ENV_BASE_URL}}/login"
 - Fill input "API Key" with "{{ENV_SECRET_KEY}}"
 ```
 
-Pass state dynamically across steps:
+Pass extracted values between steps:
 ```markdown
-- Click button "Create Token"
-- Store text from heading "Token" as "AUTH_KEY"
-- Fill input "Enter Token" with "{{AUTH_KEY}}"
+- Click button "Generate API Key"
+- Store text from heading "Key" as "API_KEY"
+- Fill input "Authorization" with "{{API_KEY}}"
 ```
 
 ---
 
-## 📊 Data-Driven Testing
+## 📊 Data-Driven Testing Matrix
 
-Execute scenarios across parameter tables by placing a Markdown table below the scenario heading:
+Run scenarios across multiple parameter combinations by declaring a Markdown table directly under the scenario header:
 
 ```markdown
 ## User Login Matrix @data-driven
@@ -234,36 +286,40 @@ Execute scenarios across parameter tables by placing a Markdown table below the 
 - Assert text "{{expected_status}}" is visible
 ```
 
+> [!IMPORTANT]
+> **Complete Execution Isolation**: md-e2e performs deep AST copies across scenario runs and matrix rows. Parameter substitutions in one row cannot leak or mutate the steps of subsequent rows.
+
 ---
 
 ## 🛡️ Self-Healing Engine
 
-When UI selectors change (e.g., button labels or layout tweaks), md-e2e intercepts locator timeouts, snapshots visible interactive elements, and resolves the target using local heuristics or optional AI fallback.
+When modern web apps undergo UI refactoring, locators can break. md-e2e includes a hybrid self-healing engine that detects locator timeouts, analyzes visible interactive elements, and suggests or applies automatic fixes.
 
 ### Production Safeguards
-1. **Similarity Threshold**: Match ratio must be $\ge 0.70$.
-2. **Role Confinement**: Buttons only heal to buttons, inputs to inputs.
-3. **Ambiguity Delta**: Top candidate must lead second place by $\ge 0.12$.
-4. **Opposing Verb Guard**: Never heals antonyms (`Save` $\neq$ `Delete`, `Cancel` $\neq$ `Confirm`).
-5. **Negative Assertion Bypass**: `Assert ... is hidden` never heals.
-6. **Metadata Stripping**: Automatically handles counter badges (`Customer Reviews (2)` matches `Customer Reviews`).
+To prevent false-positive heals, md-e2e enforces 6 strict invariants:
+
+1. **Similarity Threshold**: Candidate similarity ratio must be $\ge 0.70$.
+2. **Strict Role Confinement**: Buttons only heal to buttons, inputs to inputs, links to links.
+3. **Ambiguity Delta**: The top match score must lead the runner-up candidate by at least $0.12$.
+4. **Opposing Verb Guard**: Never heals antonym actions (e.g., `Delete` $\neq$ `Save`, `Cancel` $\neq$ `Confirm`).
+5. **Assertion Immunity**: All assertion steps (`Assert ...`) are strictly excluded from self-healing to prevent mutating test criteria.
+6. **DOM Snapshot Redaction**: Password fields (`type="password"` or `autocomplete="*-password"`) are redacted to `<PASSWORD>` before being passed to LLM healing.
 
 ### Enabling AI / LLM Fallback (Tier 2)
-Set your API key via environment variable:
+Provide your OpenAI or compatible endpoint credentials:
 ```bash
-export OPENAI_API_KEY="sk-..."       # Linux/macOS
-$env:OPENAI_API_KEY="sk-..."        # Windows PowerShell
+# Environment variables
+export OPENAI_API_KEY="sk-..."
+export LLM_BASE_URL="http://localhost:11434/v1"  # Optional: Ollama, Azure, vLLM
+export LLM_MODEL="llama3.1"                      # Optional: Model name
 ```
-Or pass directly: `md-e2e run tests/ --llm-api-key "sk-..."`.
-
-For custom OpenAI-compatible endpoints (e.g., Azure, Ollama, LM Studio), set these variables:
+Or pass directly via CLI:
 ```bash
-export LLM_BASE_URL="http://localhost:11434/v1"
-export LLM_MODEL="llama3.1"
+md-e2e run tests/ --llm-api-key "sk-..."
 ```
 
 ### Auto-Generated Git Patches
-At the end of a run, healed steps produce a `git apply`-compatible patch:
+When healing resolves broken selectors, md-e2e outputs a standard `git apply`-compatible patch file:
 ```diff
 --- a/tests/checkout.test.md
 +++ b/tests/checkout.test.md
@@ -292,7 +348,7 @@ async def custom_login(page, email: str, role: str, store):
     store.store("CURRENT_USER", email)
 ```
 
-Use in tests:
+Use directly in your test specs:
 ```markdown
 ## Custom Step Scenario
 - Clear all browser cookies
@@ -305,18 +361,19 @@ Use in tests:
 ## 🐛 Debugger & Recorder
 
 ### Interactive Step Debugger
-Step through actions in real time with visual browser highlights:
+Step through actions in real time with visual highlights in the browser:
 ```bash
 md-e2e run tests/sample.test.md --step
 ```
-- `Enter`: Next step
-- `r`: Retry step
-- `e`: Edit step on-the-fly
-- `s`: Skip step
+Interactive debugger key commands:
+- `Enter`: Execute current step and advance
+- `r`: Retry current step
+- `e`: Edit current step on-the-fly
+- `s`: Skip current step
 - `q`: Quit execution
 
 ### Action Recorder (Codegen)
-Generate Markdown tests interactively by browsing:
+Generate clean Markdown test specs interactively by navigating your application:
 ```bash
 md-e2e record "https://example.com" -o tests/recorded.test.md
 ```
@@ -325,31 +382,34 @@ md-e2e record "https://example.com" -o tests/recorded.test.md
 
 ## 📊 Reports & Living Documentation
 
-Generate Markdown PR summaries and interactive HTML dashboards:
+Generate Markdown summaries for PR comments and interactive zero-dependency HTML dashboards:
 
 ```bash
 md-e2e run tests/ --report-md summary.md --report-html report.html
 ```
 
 - **`summary.md`**: GitHub PR comment-ready summary with test outcome badges and collapsible error traces.
-- **`report.html`**: Zero-dependency dashboard with search filters, embedded screenshots, video recordings, and trace viewer downloads.
+- **`report.html`**: Interactive standalone dashboard with search filters, execution timestamps, embedded failure screenshots, and step timings.
 
 ---
 
 ## 🧪 Pytest Integration
 
-Markdown tests are automatically collected and executed under `pytest`:
+All Markdown test suites are automatically collected and executed by `pytest`:
 
 ```bash
-# Run all tests
+# Run all markdown tests
 pytest -v
 
-# Run tagged scenarios
+# Filter by tags (@smoke, @checkout)
 pytest -m "smoke and not slow" -v
 
-# Run with headed browser & custom timeout
+# Run with headed browser & custom step timeout
 pytest --md-headed --md-timeout 15000
 ```
+
+> [!NOTE]
+> md-e2e hooks into pytest lifecycle events to guarantee that suite-level teardown code executes reliably even when runs are aborted with `-x`, filtered with `-k`, or terminated on failure.
 
 ---
 
@@ -362,29 +422,29 @@ md-e2e run <path> [options]
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `path` | Argument | *(required)* | Path to test file or directory |
+| `path` | Argument | *(required)* | Path to Markdown test file or directory |
 | `--headed` | Flag | `False` | Run with visible browser window |
-| `--browser` | Choice | `chromium` | Engine (`chromium`, `firefox`, `webkit`) |
+| `--browser` | Choice | `chromium` | Browser engine (`chromium`, `firefox`, `webkit`) |
 | `--slowmo` | Integer | `0` | Delay between actions in milliseconds |
-| `--timeout` | Integer | `30000` | Step timeout in milliseconds |
-| `--step` | Flag | `False` | Enable interactive step debugger |
+| `--timeout` | Integer | `30000` | Step timeout budget in milliseconds |
+| `--step` | Flag | `False` | Launch interactive step debugger |
 | `--healing / --no-healing` | Flag | `True` | Toggle self-healing engine |
-| `--clean-session` | Flag | `False` | Isolate variables per scenario |
-| `--verbose / -v` | Flag | `False` | Show full stack traces and logs |
+| `--clean-session` | Flag | `False` | Isolate variable store between scenarios |
+| `--verbose / -v` | Flag | `False` | Display detailed step execution and debug logs |
 | `--llm-api-key` | String | `None` | API key for LLM healing fallback |
-| `--report-md` | Path | `None` | Export Markdown summary report |
-| `--report-html` | Path | `None` | Export interactive HTML report |
+| `--report-md` | Path | `None` | Path to export GitHub-flavored Markdown report |
+| `--report-html` | Path | `None` | Path to export interactive HTML dashboard |
 
-### Other Commands
-- `md-e2e init`: Scaffold `tests/` directory with sample files.
-- `md-e2e record <url> [-o out.test.md]`: Launch browser codegen session.
-- `md-e2e info <path>`: Inspect suites, scenarios, and tags.
+### Auxiliary Commands
+- `md-e2e init`: Scaffolds a starter `tests/` directory with sample tests and `conftest.py`.
+- `md-e2e record <url> [-o out.test.md]`: Launches browser recorder to generate Markdown test steps.
+- `md-e2e info <path>`: Inspects Markdown suites, displaying scenarios, steps, and tags.
 
 ---
 
 ## 🤖 CI/CD Integration
 
-### GitHub Actions (`.github/workflows/e2e.yml`)
+### GitHub Actions Workflow (`.github/workflows/e2e.yml`)
 
 ```yaml
 name: E2E Tests
@@ -395,18 +455,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: |
+          
+      - name: Install dependencies
+        run: |
           pip install md-e2e
           playwright install --with-deps chromium
-      - run: md-e2e run tests/ --report-md summary.md --report-html report.html
+          
+      - name: Run E2E Tests
+        run: md-e2e run tests/ --report-md summary.md --report-html report.html
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      - if: always()
+          
+      - name: Publish Test Summary
+        if: always()
         run: cat summary.md >> $GITHUB_STEP_SUMMARY
-      - if: always()
+        
+      - name: Upload HTML Report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: html-report
@@ -415,50 +484,48 @@ jobs:
 
 ---
 
-## 💬 Special Characters & Quoting
+## 💬 Quoting & CSS Escaping
 
-| Syntax | Description | Example |
+| Syntax Pattern | Purpose | Example |
 | :--- | :--- | :--- |
 | `"..."` | Standard double quotes | `- Click button "Login"` |
-| `'...'` | Single quotes for nested double quotes | `- Assert text 'Results for "Shoes"' is visible` |
-| `` `...` `` | Backticks for mixed quotes | `` - Assert text `User "John's" Profile` is visible `` |
-| `\"` | Escaped double quotes | `- Assert text "Results for \"Shoes\"" is visible` |
+| `'...'` | Single quotes for strings containing double quotes | `- Assert text 'Results for "Shoes"' is visible` |
+| `` `...` `` | Backticks for complex nested quotes | `` - Assert text `User "John's" Profile` is visible `` |
+| `\"` | Escaped quotes within double-quoted strings | `- Assert text "Results for \"Shoes\"" is visible` |
 
-*Note: Slashes in element names (e.g. `Light/Dark`) are automatically escaped.*
-
----
-
-## 🔒 Browser Context Isolation
-
-By default, browser contexts (cookies, localStorage) are clean per scenario, while variables are shared across the suite. To enforce completely isolated variables per scenario, pass `--clean-session`:
-
-```bash
-md-e2e run tests/ --clean-session
-```
+> [!TIP]
+> Special characters in element names (including slashes, brackets, colons, quotes, newlines, and form feeds) are safely escaped through canonical CSS serialization, ensuring robust live Playwright execution.
 
 ---
 
 ## ❓ Troubleshooting
 
-| Issue | Resolution |
-| :--- | :--- |
-| `Executable doesn't exist` | Run `playwright install --with-deps chromium` |
-| `StepNotImplementedError` | Verify custom step regex in `tests/conftest.py` |
-| `UnicodeEncodeError` on Windows | Resolved natively in md-e2e v0.2.0+ via UTF-8 stdout wrapping |
-| Flaky timing in SPA apps | Add `Wait for URL contains "..."` or `Wait for network idle` |
-| Ambiguous `<select>` matching | `Select ... from ...` prioritizes `<select>` tags by label / name |
+| Issue | Cause | Solution |
+| :--- | :--- | :--- |
+| `Executable doesn't exist` | Playwright browser binaries missing | Run `playwright install --with-deps chromium` |
+| `StepNotImplementedError` | DSL step not recognized | Check spelling or register regex in `tests/conftest.py` |
+| Dynamic SPA rendering lag | Element mounting asynchronously | md-e2e automatically waits up to the timeout budget; use `Wait for URL contains "..."` or `Wait for network idle` if needed |
+| Cascading `<select>` timeout | Dropdown options load dynamically | md-e2e uses monotonic deadline budgeting; ensure the `<select>` has an accessible label, name, or ID |
+| Windows console encoding | UTF-8 characters in terminal | md-e2e includes native UTF-8 stdout wrapping on Windows |
 
 ---
 
 ## 🤝 Contributing
 
 ```bash
+# Clone the repository
 git clone https://github.com/contributors/md-e2e.git
 cd md-e2e
+
+# Setup virtual environment
 python -m venv venv
 source venv/bin/activate  # Windows: .\venv\Scripts\Activate.ps1
+
+# Install dependencies and browsers
 pip install -e ".[dev]"
 playwright install --with-deps chromium
+
+# Run the test suite
 pytest -v
 ```
 
