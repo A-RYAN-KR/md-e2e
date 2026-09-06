@@ -65,34 +65,6 @@ md-e2e uses a multi-tier prioritized resolution model to locate DOM elements wit
   <img src="assets/architecture-diagram.png" alt="md-e2e Architecture & Locator Engine" width="900"/>
 </p>
 
-<details>
-<summary><b>View Flowchart Source (Mermaid)</b></summary>
-
-```mermaid
-flowchart TD
-    Step["Step: Click button 'Submit'"] --> Engine{"Raw Selector?"}
-    Engine -- "Yes (#id, .class, >>)" --> Direct["Playwright Raw Selector Execution"]
-    Engine -- "No (Natural Language)" --> TierList["TierList Semantic Resolution"]
-    
-    subgraph TierList["TierList Semantic Pipeline"]
-        T1["Tier 1: Semantic Accessible Name (role + name)"]
-        T2["Tier 2: Attribute Match (placeholder, title, aria-label)"]
-        T3["Tier 3: Exact Text Match"]
-        T4["Tier 4: Fuzzy Fallback (substring, CSS-escaped)"]
-        
-        T1 --> T2 --> T3 --> T4
-    end
-
-    TierList --> Monotonic["Monotonic Budget Wait (wait_and_pick_tier)"]
-    Monotonic --> Pick{"Candidate Found?"}
-    Pick -- "Yes" --> Action["Execute Action / Assertion"]
-    Pick -- "Timeout" --> Heal{"Healing Enabled?"}
-    Heal -- "Yes & Healable" --> Snapshot["DOM Snapshot & Safeguard Evaluation"]
-    Heal -- "No or Assertion" --> Fail["Raise TimeoutError"]
-```
-
-</details>
-
 ### Raw Selectors vs Natural Language
 md-e2e understands when an identifier is a technical CSS/Playwright selector versus natural language text:
 
